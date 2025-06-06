@@ -45,8 +45,6 @@
         }
 
         body.header-hidden-adjust {
-            /* Este ajuste ya no es tan crítico si el header está oculto visualmente
-               pero su espacio no lo "sube" tanto. Podemos dejarlo en 0. */
             margin-top: 0px;
         }
 
@@ -153,6 +151,20 @@
         .route-actions button.google-maps:hover { background-color: #c0362c; }
         .route-actions button.whatsapp { background-color: #25d366; }
         .route-actions button.whatsapp:hover { background-color: #1da851; }
+        /* Estilo específico para el botón de cargar rutas */
+        button#triggerImportBtn {
+            background-color: #28a745; /* Verde para cargar */
+        }
+        button#triggerImportBtn:hover {
+            background-color: #218838;
+        }
+        /* Estilo para el botón de compartir la app */
+        button#welcomeShareAppBtn, button#sidebarShareAppBtn {
+            background-color: #6f42c1; /* Color morado */
+        }
+        button#welcomeShareAppBtn:hover, button#sidebarShareAppBtn:hover {
+            background-color: #5931a2; /* Morado más oscuro al pasar el ratón */
+        }
 
         #mapControls {
             display: none; /* Inicialmente oculto, se muestra al iniciar el mapa */
@@ -547,10 +559,13 @@
                 <button id="welcomeSearchBtn">Buscar un lugar</button>
                 <button id="welcomeSavedRoutesBtn">Ver rutas guardadas</button>
                 <button id="welcomeNewRouteBtn">Crear una nueva ruta</button>
-                <button id="welcomeInfoBtn">Acerca de</button> </div>
+                <button id="welcomeInfoBtn">Información</button>
+                <p style="margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; font-weight: bold; color: #333;">¿Te gustó la forma de acceder a tus rutas? ¡Compárteme con tus amigos!</p>
+                <button id="welcomeShareAppBtn" style="background-color: #6f42c1;">Compartir la App</button>
+            </div>
 
             <div id="appInfoContainer" style="display: none; margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9; text-align: left;">
-                <p><strong>Créa y Guarda tus rutas personalizadas con nuestro Planificador de rutas. Creado especialmente para transportistas, con nuestro avanzado mapa interactivo de Rutas punto a Punto. Ideal para evitar transitar por casetas de CUOTA no autorizadas o tramos de riesgo.</strong></p>
+                <p><strong>Crea, Explora y Guarda tus rutas personalizadas para transportistas, con nuestro avanzado mapa interactivo de Rutas punto a Punto. Ideal para evitar transitar por casetas de cuota no autorizadas o tramos de riesgo.</strong></p>
                 <p style="font-size: 0.85em; color: #555; margin-top: 15px;">© 2025 Javier Soto Ávila, Instructor DX. Todos los derechos reservados.</p>
                 <button id="closeAppInfoBtn" style="margin-top: 15px; background-color: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">Cerrar</button>
             </div>
@@ -616,6 +631,15 @@
                     <button id="confirmClearDataBtn">Sí, borrar todo</button>
                     <button id="cancelClearDataBtn">Cancelar</button>
                 </div>
+
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; text-align: center;">
+                    <p style="font-weight: bold; margin-bottom: 10px; color: #333;">Transferir Rutas:</p>
+                    <button id="exportRoutesWhatsAppBtn" class="whatsapp" style="margin-bottom: 10px; width: auto; display: inline-block;">Compartir Rutas (WhatsApp)</button>
+                    <input type="file" id="importRoutesInput" accept=".json" style="display: none;">
+                    <button id="triggerImportBtn" style="margin-bottom: 10px; width: auto; display: inline-block; background-color: #28a745;">Cargar Rutas (Archivo)</button>
+                    <button id="sidebarShareAppBtn" style="margin-top: 10px; background-color: #6f42c1;">Compartir esta App</button>
+                </div>
+
             </div>
         </div>
         <div id="map"></div>
@@ -686,6 +710,11 @@
         const confirmClearDataBtn = document.getElementById('confirmClearDataBtn');
         const cancelClearDataBtn = document.getElementById('cancelClearDataBtn');
 
+        // Nuevas referencias para exportar/importar
+        const exportRoutesWhatsAppBtn = document.getElementById('exportRoutesWhatsAppBtn');
+        const importRoutesInput = document.getElementById('importRoutesInput');
+        const triggerImportBtn = document.getElementById('triggerImportBtn');
+
         // Nuevas referencias para el dropdown de categorías
         const categoryDropdownToggle = document.getElementById('categoryDropdownToggle');
         const categoryDropdown = document.getElementById('categoryDropdown');
@@ -703,6 +732,10 @@
         const appInfoContainer = document.getElementById('appInfoContainer');
         const closeAppInfoBtn = document.getElementById('closeAppInfoBtn');
         const welcomeButtonsDiv = document.querySelector('.welcome-buttons');
+
+        // Nuevas referencias para el botón de compartir la App
+        const welcomeShareAppBtn = document.getElementById('welcomeShareAppBtn');
+        const sidebarShareAppBtn = document.getElementById('sidebarShareAppBtn');
 
 
         // Guardamos la referencia al padre original de mapControls para moverlo entre sidebar y menú móvil
@@ -1148,6 +1181,113 @@
             }
         }
 
+        // Función para exportar rutas y compartir por WhatsApp
+        async function exportRoutesWhatsApp() {
+            const routes = localStorage.getItem('savedRoutes');
+            if (!routes || routes === '[]') {
+                alert('No hay rutas guardadas para exportar.');
+                return;
+            }
+
+            const fileName = `rutas_CreadorRutas_${new Date().toISOString().slice(0,10)}.json`;
+            const blob = new Blob([routes], { type: 'application/json' });
+
+            // Intentar usar la Web Share API (para dispositivos móviles con navegadores compatibles)
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], fileName)] })) {
+                try {
+                    await navigator.share({
+                        files: [new File([blob], fileName)], // Crear un objeto File del Blob
+                        title: 'Mis Rutas de Creador de Rutas',
+                        text: 'Aquí te comparto mis rutas guardadas de la aplicación Creador de Rutas.'
+                    });
+                    alert('Rutas compartidas con éxito.');
+                } catch (error) {
+                    console.error('Error al compartir vía Web Share API:', error);
+                    if (error.name === 'AbortError') {
+                        // El usuario canceló la compartición
+                        alert('Compartición cancelada.');
+                    } else {
+                        alert('No se pudo compartir directamente. Descargando el archivo...');
+                        // Si falla o no se puede compartir, se ofrece la descarga normal
+                        downloadJsonFile(blob, fileName);
+                    }
+                }
+            } else {
+                // Si la Web Share API no está disponible o no soporta archivos, ofrecer descarga normal
+                alert('Tu navegador no soporta compartir archivos directamente. Se descargará el archivo JSON.');
+                downloadJsonFile(blob, fileName);
+            }
+        }
+
+        // Función auxiliar para descargar el archivo JSON (para cuando Web Share API no es compatible)
+        function downloadJsonFile(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", url);
+            downloadAnchorNode.setAttribute("download", fileName);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            URL.revokeObjectURL(url); // Liberar memoria
+        }
+
+        // Función para importar rutas
+        function importRoutes(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedRoutes = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedRoutes) || !importedRoutes.every(r => r.name && r.waypoints)) {
+                        alert('El archivo no parece ser un formato de rutas válido. Asegúrate de que sea un archivo JSON de rutas.');
+                        return;
+                    }
+
+                    const existingRoutes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+
+                    if (confirm('¿Desea FUSIONAR las rutas del archivo con sus rutas existentes (las rutas con el mismo nombre y categoría se actualizarán)?\n\nPresione "Cancelar" para SOBREESCRIBIR TODAS las rutas.')) {
+                        const mergedRoutes = [...existingRoutes];
+                        importedRoutes.forEach(newRoute => {
+                            // Validar que la nueva ruta tenga la estructura mínima esperada
+                            if (newRoute.name && newRoute.waypoints && Array.isArray(newRoute.waypoints)) {
+                                const existingIndex = mergedRoutes.findIndex(r => r.name === newRoute.name && r.category === newRoute.category);
+                                if (existingIndex !== -1) {
+                                    mergedRoutes[existingIndex] = newRoute; // Actualizar existente
+                                } else {
+                                    mergedRoutes.push(newRoute); // Añadir nueva
+                                }
+                            } else {
+                                console.warn('Ruta inválida encontrada en el archivo importado, omitiendo:', newRoute);
+                            }
+                        });
+                        localStorage.setItem('savedRoutes', JSON.stringify(mergedRoutes));
+                        alert('Rutas importadas y fusionadas.');
+                    } else {
+                        localStorage.setItem('savedRoutes', JSON.stringify(importedRoutes));
+                        alert('Rutas importadas y sobrescritas completamente.');
+                    }
+
+                    renderSavedRoutes();
+                    populateCategoryDropdown();
+                    clearCurrentRoute();
+                    // Cerrar el menú móvil si se está importando desde allí
+                    if (window.innerWidth <= 768 && mobileMenuOverlay.classList.contains('active')) {
+                        mobileMenuClose.click();
+                    }
+                } catch (error) {
+                    alert('Error al leer o parsear el archivo JSON. Asegúrate de que sea un archivo JSON válido.');
+                    console.error('Error al importar rutas:', error);
+                }
+            };
+            reader.readAsText(file);
+            // Limpiar el input file para que se pueda seleccionar el mismo archivo de nuevo si se desea
+            event.target.value = '';
+        }
+
         function clearAllData() {
             // La confirmación ya se maneja en el UI
             localStorage.clear();
@@ -1221,6 +1361,46 @@
             welcomeMessageContent.style.maxWidth = '90%'; // Restaura el ancho original o uno adecuado
         }
 
+        // Función para compartir la aplicación
+        async function shareApp() {
+            const appUrl = window.location.href; // Obtiene la URL actual de la aplicación
+            const appTitle = "Creador de Rutas con OpenStreetMap";
+            const appText = "¡Descubre el Creador de Rutas! Una herramienta fácil para crear, guardar y compartir rutas punto a punto, ideal para transportistas y más.";
+
+            if (navigator.share) {
+                // Si la Web Share API está disponible
+                try {
+                    await navigator.share({
+                        title: appTitle,
+                        text: appText,
+                        url: appUrl,
+                    });
+                    console.log('App compartida con éxito.');
+                } catch (error) {
+                    console.error('Error al compartir la app:', error);
+                    if (error.name === 'AbortError') {
+                        alert('Compartición de la aplicación cancelada.');
+                    } else {
+                        // Si falla la Web Share API, intenta copiar al portapapeles
+                        copyAppUrlToClipboard(appUrl);
+                    }
+                }
+            } else {
+                // Fallback para navegadores sin Web Share API
+                copyAppUrlToClipboard(appUrl);
+            }
+        }
+
+        // Función auxiliar para copiar la URL al portapapeles
+        function copyAppUrlToClipboard(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('El enlace de la aplicación ha sido copiado a tu portapapeles. ¡Compártelo!');
+            }).catch(err => {
+                console.error('Error al copiar al portapapeles:', err);
+                alert('No se pudo copiar el enlace automáticamente. Por favor, copia esta URL manualmente: ' + url);
+            });
+        }
+
 
         // --- Event Listeners ---
         addPointBtn.addEventListener('click', () => {
@@ -1270,6 +1450,13 @@
             clearDataConfirmation.style.display = 'none'; // Oculta la confirmación
             clearDataText.style.display = 'block'; // Vuelve a mostrar el texto
         });
+
+        // Event Listeners para Exportar/Importar Rutas
+        exportRoutesWhatsAppBtn.addEventListener('click', exportRoutesWhatsApp); // Llama a la nueva función
+        triggerImportBtn.addEventListener('click', () => {
+            importRoutesInput.click(); // Dispara el clic en el input de archivo oculto
+        });
+        importRoutesInput.addEventListener('change', importRoutes); // Maneja la selección del archivo
 
         // Event Listeners para el dropdown de categorías
         categoryDropdownToggle.addEventListener('click', (event) => {
@@ -1357,7 +1544,7 @@
                 }
                 mobileMenuContent.removeEventListener('transitionend', handler);
             });
-            categoryDropdown.style.display = 'none'; // Asegura que el dropdown se cierre al cerrar el menú móvil
+            categoryDropdown.style.display = 'none'; // Cierra el dropdown de categorías al cerrar el menú móvil
             setTimeout(hideHeader, 500); // Pequeño retraso para que la transición del menú termine antes de ocultar header
         });
 
@@ -1367,7 +1554,8 @@
             if (routeInstructionsPanel.style.display === 'none' || routeInstructionsPanel.style.display === '') {
                 routeInstructionsPanel.style.display = 'block';
                 toggleInstructionsBtn.textContent = 'Ocultar Instrucciones';
-            } else {
+            }
+            else {
                 routeInstructionsPanel.style.display = 'none';
                 toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
             }
@@ -1485,6 +1673,22 @@
         welcomeInfoBtn.addEventListener('click', showAppInfo);
         closeAppInfoBtn.addEventListener('click', hideAppInfo);
 
+        // Event Listeners para el botón de Compartir la App
+        if (welcomeShareAppBtn) { // Asegúrate de que el elemento exista antes de añadir el listener
+            welcomeShareAppBtn.addEventListener('click', () => {
+                hideAppInfo(); // Asegura que la info se oculte antes de cualquier acción
+                shareApp();
+            });
+        }
+        if (sidebarShareAppBtn) { // Asegúrate de que el elemento exista antes de añadir el listener
+            sidebarShareAppBtn.addEventListener('click', () => {
+                shareApp();
+                // Opcional: cierra el menú móvil si se comparte desde allí
+                if (window.innerWidth <= 768 && mobileMenuOverlay.classList.contains('active')) {
+                    mobileMenuClose.click();
+                }
+            });
+        }
 
         // Inicializa el mensaje de bienvenida al cargar la página
         document.addEventListener('DOMContentLoaded', () => {

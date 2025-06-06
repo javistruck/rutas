@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creador de Rutas Punto a Punto con OpenStreetMap</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            transition: margin-top 0.5s ease-out; /* Suavizar el movimiento del body */
+        }
+        header {
+            background-color: #f0f0f0;
+            padding: 10px 20px;
+            border-bottom: 1px solid #ccc;
+            text-align: center;
+            position: relative; /* Necesario para el contexto de otros elementos si los hubiera */
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out, height 0.5s ease-out, padding 0.5s ease-out; /* Añadir transición para height y padding */
+            overflow: hidden; /* Asegura que el contenido se recorte si se reduce la altura */
+        }
+        header.hidden {
+            opacity: 0;
+            transform: translateY(-100%); /* Desliza hacia arriba para ocultar */
+            height: 0; /* ¡Esto es clave! Elimina la altura */
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-bottom: 0; /* Asegurar que no haya margen inferior */
+            border-bottom: none; /* Eliminar el borde inferior */
+            pointer-events: none; /* Deshabilita interacciones con el elemento oculto */
+        }
+
+        body.header-hidden-adjust {
+            /* Este ajuste ya no es tan crítico si el header está oculto visualmente
+               pero su espacio no lo "sube" tanto. Podemos dejarlo en 0. */
+            margin-top: 0px;
+        }
+
+        .container {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 300px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-right: 1px solid #ccc;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            min-height: 400px;
+            display: none; /* Inicialmente oculto */
+        }
+        .controls button, .route-actions button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .controls button:hover, .route-actions button:hover {
+            background-color: #0056b3;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+            position: relative; /* Necesario para el dropdown de categorías */
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .input-group input[type="text"] {
+            width: calc(100% - 22px); /* Ajuste para padding/borde */
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        /* Específico para el input de categoría, si fuera necesario */
+        .input-group input#routeCategory {
+            width: calc(100% - 22px - 35px); /* Ajuste para el icono */
+        }
+
+        #savedRoutesList { /* Este ID ya no se usa directamente para la lista principal */
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        /* Estilos genéricos para botones en listas */
+        #savedRoutesContainer li button {
+            background-color: #007bff; /* Color por defecto para cargar */
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            width: auto;
+            margin-bottom: 0; /* Anula el margin-bottom general */
+            font-size: 0.9rem;
+            margin-left: 5px; /* Espacio entre botones */
+        }
+        #savedRoutesContainer li button:hover {
+            background-color: #0056b3;
+        }
+        #savedRoutesContainer li button.delete-btn { /* Estilo específico para el botón de eliminar */
+            background-color: #dc3545;
+        }
+        #savedRoutesContainer li button.delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        #routeInfo {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e0f7fa;
+            border-left: 5px solid #00bcd4;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .route-actions {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .route-actions button.google-maps { background-color: #db4437; }
+        .route-actions button.google-maps:hover { background-color: #c0362c; }
+        .route-actions button.whatsapp { background-color: #25d366; }
+        .route-actions button.whatsapp:hover { background-color: #1da851; }
+
+        #mapControls {
+            display: none; /* Inicialmente oculto, se muestra al iniciar el mapa */
+            flex-direction: column;
+        }
+
+        /* --- ESTILOS CRUCIALES PARA EL MENÚ HAMBURGUESA Y BOTÓN DE INSTRUCCIONES (AHORA FIJOS) --- */
+        .hamburger-menu {
+            display: none; /* Oculto por defecto en desktop */
+            font-size: 2rem;
+            cursor: pointer;
+            position: fixed; /* ¡CAMBIO CLAVE: AHORA ES FIJO! */
+            top: 10px; /* Siempre a 10px del borde superior de la ventana */
+            left: 10px; /* Siempre a 10px del borde izquierdo de la ventana */
+            z-index: 1001; /* Asegura que esté por encima de casi todo */
+            color: #333;
+            background-color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            /* No necesitamos transiciones de 'top' si ya no se mueve con el header */
+        }
+
+        #toggleInstructionsBtn {
+            position: fixed; /* ¡CAMBIO CLAVE: AHORA ES FIJO! */
+            top: 10px; /* Siempre a 10px del borde superior de la ventana */
+            right: 70px; /* Ajustado para que no choque con el menú hamburguesa si ambos se muestran en móvil */
+            z-index: 601; /* Sobre el panel de instrucciones, pero debajo del menú móvil */
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: none; /* Oculto hasta que haya ruta */
+            /* No necesitamos transiciones de 'top' si ya no se mueve con el header */
+        }
+        #toggleInstructionsBtn:hover {
+            background-color: #0056b3;
+        }
+
+
+        .mobile-menu-overlay {
+            display: none; /* Oculto por defecto */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: flex-end; /* Alinea el contenido a la derecha */
+            align-items: flex-end; /* Alinea el contenido en la parte inferior para deslizar hacia arriba */
+        }
+
+        .mobile-menu-content {
+            background-color: #f9f9f9;
+            width: 100%;
+            max-width: 400px; /* Ancho máximo para el menú en móvil */
+            max-height: 80vh; /* Altura máxima para el scroll */
+            padding: 20px;
+            border-radius: 8px 8px 0 0; /* Bordes redondeados solo arriba */
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(100%); /* Empieza fuera de la pantalla */
+            transition: transform 0.3s ease-out;
+        }
+        .mobile-menu-overlay.active .mobile-menu-content {
+            transform: translateY(0); /* Se desliza hacia arriba */
+        }
+
+        .mobile-menu-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.8rem;
+            cursor: pointer;
+            color: #555;
+        }
+
+        #routeInstructionsPanel {
+            display: none; /* Oculto por defecto */
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 280px;
+            max-height: calc(100% - 20px);
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 600; /* Asegura que esté sobre el mapa pero debajo del menú móvil */
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+
+        #routeInstructionsPanel h3 {
+            margin-top: 0;
+            color: #333;
+            text-align: center;
+        }
+
+        #routeInstructionsPanel ol {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+        #routeInstructionsPanel li {
+            margin-bottom: 5px;
+        }
+
+        /* --- Estilos para el texto y botones de borrar caché --- */
+        #clearDataText {
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.95rem; /* Un poco más grande para el texto */
+        }
+        #clearDataText:hover {
+            color: #0056b3;
+        }
+        #clearDataConfirmation {
+            margin-top: 10px;
+            text-align: center;
+        }
+        #clearDataConfirmation p {
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+        #confirmClearDataBtn, #cancelClearDataBtn {
+            display: inline-block; /* Para que estén uno al lado del otro */
+            width: auto;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin: 5px;
+        }
+        #confirmClearDataBtn {
+            background-color: #dc3545; /* Rojo para borrar */
+            color: white;
+        }
+        #confirmClearDataBtn:hover {
+            background-color: #c82333;
+        }
+        #cancelClearDataBtn {
+            background-color: #6c757d; /* Gris para cancelar */
+            color: white;
+        }
+        #cancelClearDataBtn:hover {
+            background-color: #5a6268;
+        }
+
+
+        /* --- ESTILOS PARA CATEGORÍAS --- */
+        .category-header {
+            background-color: #e0e0e0;
+            padding: 10px 15px;
+            margin-top: 15px;
+            margin-bottom: 5px; /* Espacio antes de la lista */
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            color: #333;
+            transition: background-color 0.2s ease;
+        }
+
+        .category-header:hover {
+            background-color: #d0d0d0;
+        }
+
+        .category-header .toggle-icon {
+            font-size: 1.2em;
+            transition: transform 0.2s ease;
+        }
+
+        .category-header.active .toggle-icon {
+            transform: rotate(90deg); /* Gira el ">" cuando está activo */
+        }
+
+        .category-routes-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: none; /* Oculto por defecto */
+            border: 1px solid #eee;
+            border-top: none; /* Para que parezca una continuación del header */
+            border-radius: 0 0 5px 5px;
+            background-color: #f3f3f3;
+        }
+
+        .category-routes-list.active {
+            display: block; /* Se muestra cuando la categoría está activa */
+        }
+
+        .category-routes-list li {
+            background-color: #fefefe;
+            padding: 10px;
+            margin-bottom: 0; /* Anula el margin-bottom general de li */
+            border-radius: 0; /* Anula el border-radius general de li */
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .category-routes-list li:last-child {
+            border-bottom: none; /* No hay borde inferior en el último elemento */
+        }
+
+        .category-routes-list li button {
+            display: inline-block; /* Para que los botones estén en línea */
+            width: auto;
+            margin-left: 10px;
+            padding: 5px 8px;
+            font-size: 0.8em;
+            margin-bottom: 0;
+        }
+
+        /* --- Estilos para el Geocodificador de Leaflet --- */
+        .leaflet-control-geocoder {
+            box-shadow: none; /* Elimina la sombra por defecto, ya que el contenedor ya tiene */
+            border-radius: 5px;
+            background-color: transparent; /* Fondo transparente */
+        }
+        .leaflet-control-geocoder-form input {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 8px;
+            width: calc(100% - 22px); /* Incluye padding y border en el ancho total */
+            box-sizing: border-box;
+            font-size: 1rem; /* Asegura que el tamaño de fuente sea legible */
+        }
+        .leaflet-control-geocoder-alternatives {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            max-height: 200px; /* Altura máxima para el scroll de resultados */
+            overflow-y: auto;
+        }
+        .leaflet-control-geocoder-alternatives a {
+            padding: 8px;
+            display: block;
+            text-decoration: none;
+            color: #333;
+            border-bottom: 1px solid #eee;
+        }
+        .leaflet-control-geocoder-alternatives a:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* --- Estilos para el mensaje de bienvenida --- */
+        #welcomeMessageOverlay {
+            position: fixed;
+            top: 0; /* Asegurar que esté pegado arriba */
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000; /* Asegura que esté sobre todo */
+        }
+
+        #welcomeMessageContent {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 90%; /* Ajuste inicial para mobile */
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            transform: scale(0.9); /* Para la animación de entrada */
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        #welcomeMessageOverlay.active #welcomeMessageContent {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        #welcomeMessageContent h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        #welcomeMessageContent .welcome-buttons {
+            display: flex;
+            flex-wrap: wrap; /* Permite que los botones se envuelvan en pantallas pequeñas */
+            justify-content: center;
+            gap: 10px; /* Espacio entre los botones */
+        }
+
+        #welcomeMessageContent .welcome-buttons button {
+            margin: 0; /* Elimina el margin general para usar gap */
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.2s ease;
+            width: 100%; /* Para que los botones se apilen en móvil */
+            max-width: 250px; /* Ancho máximo para botones */
+        }
+        #welcomeMessageContent .welcome-buttons button:hover {
+            background-color: #0056b3;
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(2) {
+            background-color: #28a745;
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(2):hover {
+            background-color: #218838;
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(3) {
+            background-color: #6c757d;
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(3):hover {
+            background-color: #5a6268;
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(4) { /* Estilo para el nuevo botón de Información */
+            background-color: #18171c; /* Un color diferente, por ejemplo teal */
+        }
+        #welcomeMessageContent .welcome-buttons button:nth-child(4):hover {
+            background-color: #7a7a7a;
+        }
+
+
+        /* Media queries para responsividad */
+        @media (max-width: 768px) {
+            #sidebar {
+                display: none; /* Oculta la sidebar por defecto en móvil */
+            }
+            .hamburger-menu {
+                display: block; /* Muestra el menú hamburguesa */
+                top: 10px;   /* Se queda fijo en la esquina superior izquierda */
+                left: 10px;
+            }
+
+            /* Ajustes para los paneles en móvil */
+            #routeInstructionsPanel {
+                width: calc(100% - 40px); /* Ocupa casi todo el ancho */
+                left: 20px; /* Ajusta la posición izquierda */
+                right: 20px; /* Ajusta la posición derecha */
+                top: 60px; /* Baja el panel para que no se superponga con los botones fijos */
+                max-height: calc(100% - 70px); /* Ajusta la altura máxima */
+            }
+            #toggleInstructionsBtn {
+                top: 10px; /* Se queda fijo en la esquina superior derecha */
+                right: 70px;
+            }
+            /* Muestra el overlay de menú móvil */
+            .mobile-menu-overlay.active {
+                display: flex;
+                align-items: flex-end; /* Alinea el contenido en la parte inferior */
+            }
+            /* Al inicio, el sidebar no se muestra en móvil */
+            body.initial #sidebar {
+                display: none;
+            }
+            /* Asegura que el geocodificador se muestre bien dentro del menú móvil */
+            #geocoder-container {
+                display: block;
+                width: 100%;
+            }
+            /* Ajuste para el input de categoría en móvil dentro del menú */
+            .input-group input#routeCategory {
+                width: calc(100% - 22px - 35px); /* Mantener ajuste para el icono */
+            }
+            /* Ajuste para el contenido de bienvenida en móviles */
+            #welcomeMessageContent {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="welcomeMessageOverlay">
+        <div id="welcomeMessageContent">
+            <h2>¡Bienvenido al Creador de Rutas!</h2>
+            <p>¿Qué te gustaría hacer hoy?</p>
+            <div class="welcome-buttons">
+                <button id="welcomeSearchBtn">Buscar un lugar</button>
+                <button id="welcomeSavedRoutesBtn">Ver rutas guardadas</button>
+                <button id="welcomeNewRouteBtn">Crear una nueva ruta</button>
+                <button id="welcomeInfoBtn">Acerca de</button> </div>
+
+            <div id="appInfoContainer" style="display: none; margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9; text-align: left;">
+                <p><strong>Créa y Guarda tus rutas personalizadas con nuestro Planificador de rutas. Creado especialmente para transportistas, con nuestro avanzado mapa interactivo de Rutas punto a Punto. Ideal para evitar transitar por casetas de CUOTA no autorizadas o tramos de riesgo.</strong></p>
+                <p style="font-size: 0.85em; color: #555; margin-top: 15px;">© 2025 Javier Soto Ávila, Instructor DX. Todos los derechos reservados.</p>
+                <button id="closeAppInfoBtn" style="margin-top: 15px; background-color: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <p>Creador de Rutas personalizadas OpenStreetMap</p>
+    </header>
+
+    <div class="hamburger-menu" id="hamburgerMenu">☰</div>
+
+    <div class="container">
+        <div id="sidebar">
+            <div id="mapControls">
+                <div class="input-group">
+                    <label for="routeName">Nombre de la Ruta:</label>
+                    <input type="text" id="routeName" placeholder="Asignar nombre">
+                </div>
+
+                <div class="input-group">
+                    <label for="routeCategory">Categoría de la Ruta:</label>
+                    <div style="display: flex; align-items: center;">
+                        <input type="text" id="routeCategory" placeholder="Nombra o elige Categoría →">
+                        <span id="categoryDropdownToggle" style="margin-left: 10px; cursor: pointer; font-size: 1.5em;" title="Seleccionar categoría existente">
+                            📚 </span>
+                    </div>
+                    <div id="categoryDropdown" style="display: none; border: 1px solid #ccc; border-top: none; max-height: 150px; overflow-y: auto; background-color: white; z-index: 500; position: absolute; width: calc(100% - 2px);">
+                        <ul id="categoryList" style="list-style: none; padding: 0; margin: 0;">
+                            </ul>
+                        <p id="noCategoriesMessage" style="text-align: center; padding: 10px; color: #666; display: none;">No hay categorías guardadas.</p>
+                    </div>
+                </div>
+
+                <div id="geocoder-container" style="margin-bottom: 15px;"></div>
+
+                <div class="controls">
+                    <button id="addPointBtn">Añadir Punto (Haz clic en el mapa)</button>
+                    <button id="clearRouteBtn">Limpiar Ruta Actual</button>
+                    <button id="saveRouteBtn">Guardar Ruta</button>
+                </div>
+
+                <div id="routeInfo">
+                    <p><strong>Distancia:</strong> <span id="distance">N/A</span></p>
+                    <p><strong>Tiempo estimado:</strong> <span id="time">N/A</span></p>
+                </div>
+
+                <div class="route-actions">
+                    <button id="openInGoogleMapsBtn" class="google-maps">Abrir en Google Maps</button>
+                    <button id="shareOnWhatsAppBtn" class="whatsapp">Compartir por WhatsApp</button>
+                </div>
+
+                <h2>Gestión de Rutas:</h2>
+                <div id="savedRoutesContainer">
+                    <p id="noRoutesMessage" style="display: none;">No hay rutas guardadas.</p>
+                    </div>
+
+                <p id="clearDataText" style="cursor: pointer; color: #007bff; text-decoration: underline; margin-top: 20px; text-align: center;">Borrar caché y rutas</p>
+
+                <div id="clearDataConfirmation" style="display: none; margin-top: 10px; text-align: center;">
+                    <p style="color: red; font-weight: bold; margin-bottom: 10px;">¡ADVERTENCIA! ¿ESTÁ SEGURO?</p>
+                    <p style="color: red; margin-bottom: 10px;">Esta acción borrará todas las rutas y categorías creadas.</p>
+                    <button id="confirmClearDataBtn">Sí, borrar todo</button>
+                    <button id="cancelClearDataBtn">Cancelar</button>
+                </div>
+            </div>
+        </div>
+        <div id="map"></div>
+
+        <button id="toggleInstructionsBtn">Mostrar Instrucciones</button>
+
+        <div id="routeInstructionsPanel">
+            <h3>Instrucciones de la Ruta</h3>
+            <div id="instructionsContent">
+                <p>Las instrucciones aparecerán aquí una vez que se genere una ruta.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay">
+        <div class="mobile-menu-content">
+            <span class="mobile-menu-close" id="mobileMenuClose">×</span>
+            <div id="mobileControlsPlaceholder">
+                </div>
+        </div>
+    </div>
+
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        let map;
+        let routingControl;
+        let waypoints = [];
+        let isAddingPoints = false;
+        let originalParentOfMapControls; // Para restaurar el sidebar en desktop
+
+        const mapContainer = document.getElementById('map');
+        const mapControls = document.getElementById('mapControls');
+        const mobileControlsPlaceholder = document.getElementById('mobileControlsPlaceholder');
+        const sidebar = document.getElementById('sidebar'); // Referencia al sidebar
+        const header = document.querySelector('header'); // Referencia a la cabecera
+
+        const routeNameInput = document.getElementById('routeName');
+        const routeCategoryInput = document.getElementById('routeCategory');
+        const addPointBtn = document.getElementById('addPointBtn');
+        const clearRouteBtn = document.getElementById('clearRouteBtn');
+        const saveRouteBtn = document.getElementById('saveRouteBtn');
+        const savedRoutesContainer = document.getElementById('savedRoutesContainer');
+        const noRoutesMessage = document.getElementById('noRoutesMessage');
+        const distanceSpan = document.getElementById('distance');
+        const timeSpan = document.getElementById('time');
+        const openInGoogleMapsBtn = document.getElementById('openInGoogleMapsBtn');
+        const shareOnWhatsAppBtn = document.getElementById('shareOnWhatsAppBtn');
+
+        const hamburgerMenu = document.getElementById('hamburgerMenu');
+        const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+        const mobileMenuContent = document.querySelector('.mobile-menu-content');
+        const mobileMenuClose = document.getElementById('mobileMenuClose');
+        const toggleInstructionsBtn = document.getElementById('toggleInstructionsBtn');
+        const routeInstructionsPanel = document.getElementById('routeInstructionsPanel');
+        const instructionsContent = document.getElementById('instructionsContent');
+
+        // Nuevas referencias para Borrar Caché y Rutas
+        const clearDataText = document.getElementById('clearDataText');
+        const clearDataConfirmation = document.getElementById('clearDataConfirmation');
+        const confirmClearDataBtn = document.getElementById('confirmClearDataBtn');
+        const cancelClearDataBtn = document.getElementById('cancelClearDataBtn');
+
+        // Nuevas referencias para el dropdown de categorías
+        const categoryDropdownToggle = document.getElementById('categoryDropdownToggle');
+        const categoryDropdown = document.getElementById('categoryDropdown');
+        const categoryList = document.getElementById('categoryList');
+        const noCategoriesMessageDropdown = document.getElementById('noCategoriesMessage'); // Renombrado para evitar conflicto con noRoutesMessage
+
+        const welcomeMessageOverlay = document.getElementById('welcomeMessageOverlay');
+        const welcomeMessageContent = document.getElementById('welcomeMessageContent');
+        const welcomeSearchBtn = document.getElementById('welcomeSearchBtn');
+        const welcomeSavedRoutesBtn = document.getElementById('welcomeSavedRoutesBtn');
+        const welcomeNewRouteBtn = document.getElementById('welcomeNewRouteBtn');
+
+        // Nuevas referencias para el botón de información de la app
+        const welcomeInfoBtn = document.getElementById('welcomeInfoBtn');
+        const appInfoContainer = document.getElementById('appInfoContainer');
+        const closeAppInfoBtn = document.getElementById('closeAppInfoBtn');
+        const welcomeButtonsDiv = document.querySelector('.welcome-buttons');
+
+
+        // Guardamos la referencia al padre original de mapControls para moverlo entre sidebar y menú móvil
+        originalParentOfMapControls = mapControls.parentNode;
+
+        function initMap() {
+            if (map) {
+                map.remove(); // Elimina el mapa existente si ya fue inicializado
+                map = null;
+            }
+
+            // Inicializa el mapa centrado en Guadalupe, Nuevo León, México
+            map = L.map('map').setView([25.6667, -100.25], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Inicializa el control de rutas (inicialmente sin waypoints)
+            routingControl = L.Routing.control({
+                waypoints: waypoints.length > 0 ? waypoints : [],
+                routeWhileDragging: true,
+                draggableWaypoints: true,
+                addWaypoints: true,
+                lineOptions: {
+                    styles: [{ color: 'blue', weight: 6, opacity: 0.7 }]
+                },
+                altRequest: false,
+                geocoder: L.Control.Geocoder.nominatim(), // Ya configurado, no necesitamos un geocodificador separado para LRM
+                showAlternatives: false,
+                showInstructions: false,
+                createMarker: function(i, waypoint, n) {
+                    const icon = L.icon({
+                        iconUrl: i === 0 ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png' : // Origen
+                                 i === n - 1 ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png' : // Destino
+                                 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', // Waypoints intermedios
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    });
+                    return L.marker(waypoint.latLng, {
+                        draggable: true,
+                        icon: icon
+                    });
+                }
+            }).addTo(map);
+
+            // Evento cuando se encuentran rutas
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                if (routes.length > 0) {
+                    const route = routes[0];
+                    const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
+                    const timeHours = Math.floor(route.summary.totalTime / 3600);
+                    const timeMinutes = Math.round((route.summary.totalTime % 3600) / 60);
+
+                    distanceSpan.textContent = `${distanceKm} km`;
+                    timeSpan.textContent = `${timeHours}h ${timeMinutes}min`;
+
+                    // Mostrar instrucciones en el panel personalizado
+                    instructionsContent.innerHTML = ''; // Limpiar contenido anterior
+                    if (route.instructions && route.instructions.length > 0) {
+                        const ol = document.createElement('ol');
+                        route.instructions.forEach(inst => {
+                            const li = document.createElement('li');
+                            li.textContent = inst.text + (inst.distance ? ` (${(inst.distance / 1000).toFixed(2)} km)` : '');
+                            ol.appendChild(li);
+                        });
+                        instructionsContent.appendChild(ol);
+                        routeInstructionsPanel.style.display = 'block'; // Mostrar el panel
+                        toggleInstructionsBtn.textContent = 'Ocultar Instrucciones';
+                        toggleInstructionsBtn.style.display = 'block'; // Mostrar el botón toggle
+                    } else {
+                        instructionsContent.innerHTML = '<p>No hay instrucciones detalladas disponibles para esta ruta.</p>';
+                        routeInstructionsPanel.style.display = 'none'; // Ocultar el panel si no hay instrucciones
+                        toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
+                        toggleInstructionsBtn.style.display = 'none'; // Ocultar el botón si no hay instrucciones
+                    }
+
+                } else {
+                    distanceSpan.textContent = 'N/A';
+                    timeSpan.textContent = 'N/A';
+                    instructionsContent.innerHTML = '<p>Genera una ruta para ver las instrucciones.</p>';
+                    routeInstructionsPanel.style.display = 'none';
+                    toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
+                    toggleInstructionsBtn.style.display = 'none';
+                }
+            });
+
+            // Evento cuando se arrastran o cambian los waypoints
+            routingControl.on('waypointsdragged', function(e) {
+                waypoints = e.waypoints.map(w => w.latLng);
+            });
+            routingControl.on('waypointschanged', function(e) {
+                waypoints = routingControl.getWaypoints().map(w => w.latLng);
+            });
+
+            // Inicializar el geocodificador de Leaflet (este se mostrará en el sidebar)
+            const geocoder = L.Control.Geocoder.nominatim();
+            const geocoderControl = new L.Control.geocoder({
+                geocoder: geocoder,
+                collapsed: false, // Mostrar siempre el campo de búsqueda
+                placeholder: 'Buscar dirección...',
+                errorMessage: 'Nada encontrado.',
+                position: 'topright' // Esta posición no importará al moverlo al sidebar
+            });
+
+            // Mueve el contenedor del geocodificador al sidebar
+            const geocoderContainer = document.getElementById('geocoder-container');
+            if (geocoderContainer) {
+                // Limpia el contenedor antes de añadir el geocodificador para evitar duplicados
+                while (geocoderContainer.firstChild) {
+                    geocoderContainer.removeChild(geocoderContainer.firstChild);
+                }
+                // Añade el elemento HTML del geocodificador al contenedor
+                geocoderContainer.appendChild(geocoderControl.onAdd(map));
+
+                // Asegurar que los estilos se apliquen correctamente para que se vea bien en el sidebar
+                geocoderControl.getContainer().style.position = 'static';
+                geocoderControl.getContainer().style.width = '100%';
+                geocoderControl.getContainer().style.boxShadow = 'none';
+                geocoderControl.getContainer().style.backgroundColor = 'transparent';
+
+                const searchInput = geocoderControl.getContainer().querySelector('input[type="text"]');
+                if (searchInput) {
+                    searchInput.style.width = 'calc(100% - 22px)';
+                    searchInput.style.boxSizing = 'border-box';
+                }
+            } else {
+                console.error("El elemento con ID 'geocoder-container' no fue encontrado en el DOM.");
+            }
+
+            // Evento cuando se selecciona una dirección del geocodificador
+            geocoderControl.on('markgeocode', function(e) {
+                const latlng = e.geocode.center;
+                addWaypoint(latlng);
+                map.setView(latlng, 15); // Centrar el mapa en el lugar buscado
+                // Limpiar el campo de búsqueda después de seleccionar
+                geocoderControl.getContainer().querySelector('input').value = '';
+                // Cerrar el menú móvil si está abierto en mobile
+                if (window.innerWidth <= 768 && mobileMenuOverlay.classList.contains('active')) {
+                    mobileMenuClose.click();
+                }
+            });
+
+
+            map.invalidateSize(); // Invalida el tamaño del mapa para asegurar que se muestre correctamente
+        }
+
+        function addWaypoint(latlng) {
+            waypoints.push(latlng);
+            updateRoutingControl();
+            // No limpiar los campos de nombre/categoría al añadir un punto, solo cuando se guarda o limpia la ruta.
+            // routeNameInput.value = '';
+            // routeCategoryInput.value = '';
+        }
+
+        function updateRoutingControl() {
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+            // Recrea el control de rutas con los waypoints actualizados
+            routingControl = L.Routing.control({
+                waypoints: waypoints,
+                routeWhileDragging: true,
+                draggableWaypoints: true,
+                addWaypoints: true,
+                lineOptions: {
+                    styles: [{ color: 'blue', weight: 6, opacity: 0.7 }]
+                },
+                altRequest: false,
+                geocoder: L.Control.Geocoder.nominatim(),
+                showAlternatives: false,
+                showInstructions: false,
+                createMarker: function(i, waypoint, n) {
+                    const icon = L.icon({
+                        iconUrl: i === 0 ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png' :
+                                 i === n - 1 ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png' :
+                                 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    });
+                    return L.marker(waypoint.latLng, {
+                        draggable: true,
+                        icon: icon
+                    });
+                }
+            }).addTo(map);
+
+            // Re-adjunta los eventos al nuevo routingControl
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                if (routes.length > 0) {
+                    const route = routes[0];
+                    const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
+                    const timeHours = Math.floor(route.summary.totalTime / 3600);
+                    const timeMinutes = Math.round((route.summary.totalTime % 3600) / 60);
+
+                    distanceSpan.textContent = `${distanceKm} km`;
+                    timeSpan.textContent = `${timeHours}h ${timeMinutes}min`;
+
+                    instructionsContent.innerHTML = '';
+                    if (route.instructions && route.instructions.length > 0) {
+                        const ol = document.createElement('ol');
+                        route.instructions.forEach(inst => {
+                            const li = document.createElement('li');
+                            li.textContent = inst.text + (inst.distance ? ` (${(inst.distance / 1000).toFixed(2)} km)` : '');
+                            ol.appendChild(li);
+                        });
+                        instructionsContent.appendChild(ol);
+                        routeInstructionsPanel.style.display = 'block';
+                        toggleInstructionsBtn.textContent = 'Ocultar Instrucciones';
+                        toggleInstructionsBtn.style.display = 'block';
+                    } else {
+                        instructionsContent.innerHTML = '<p>No hay instrucciones detalladas disponibles para esta ruta.</p>';
+                        routeInstructionsPanel.style.display = 'none';
+                        toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
+                        toggleInstructionsBtn.style.display = 'none';
+                    }
+                } else {
+                    distanceSpan.textContent = 'N/A';
+                    timeSpan.textContent = 'N/A';
+                    instructionsContent.innerHTML = '<p>Genera una ruta para ver las instrucciones.</p>';
+                    routeInstructionsPanel.style.display = 'none';
+                    toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
+                    toggleInstructionsBtn.style.display = 'none';
+                }
+            });
+            routingControl.on('waypointsdragged', function(e) {
+                waypoints = e.waypoints.map(w => w.latLng);
+            });
+            routingControl.on('waypointschanged', function(e) {
+                waypoints = routingControl.getWaypoints().map(w => w.latLng);
+            });
+        }
+
+        function clearCurrentRoute() {
+            waypoints = [];
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+            distanceSpan.textContent = 'N/A';
+            timeSpan.textContent = 'N/A';
+            routeNameInput.value = '';
+            routeCategoryInput.value = ''; // Limpiar también el campo de categoría
+            instructionsContent.innerHTML = '<p>Las instrucciones aparecerán aquí una vez que se genere una ruta.</p>';
+            routeInstructionsPanel.style.display = 'none';
+            toggleInstructionsBtn.style.display = 'none';
+            if (!map) { // Si el mapa no está inicializado, lo inicializa
+                initMap();
+            } else { // Si ya está, solo actualiza el control de rutas sin waypoints
+                updateRoutingControl();
+            }
+        }
+
+        function saveRoute() {
+            if (waypoints.length < 2) {
+                alert('Necesitas al menos dos puntos para guardar una ruta.');
+                return;
+            }
+            let name = routeNameInput.value.trim();
+            if (!name) {
+                name = `Ruta ${new Date().toLocaleString()}`;
+            }
+            let category = routeCategoryInput.value.trim(); // Obtener la categoría
+            if (!category) {
+                category = 'Sin Categoría'; // Categoría por defecto
+            }
+
+            const routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+            const serializableWaypoints = waypoints.map(wp => ({ lat: wp.lat, lng: wp.lng }));
+
+            // Comprobar si la ruta ya existe por nombre y categoría
+            const existingIndex = routes.findIndex(r => r.name === name && r.category === category);
+            if (existingIndex !== -1) {
+                routes[existingIndex] = { name, category, waypoints: serializableWaypoints };
+                alert(`Ruta "${name}" en "${category}" actualizada.`);
+            } else {
+                routes.push({ name, category, waypoints: serializableWaypoints });
+                alert(`Ruta "${name}" guardada en "${category}".`);
+            }
+
+            localStorage.setItem('savedRoutes', JSON.stringify(routes));
+            renderSavedRoutes();
+            populateCategoryDropdown(); // Llama a esta nueva función para actualizar el dropdown después de guardar
+        }
+
+        function renderSavedRoutes() {
+            savedRoutesContainer.innerHTML = ''; // Limpiar el contenedor antes de renderizar
+            const routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+
+            if (routes.length === 0) {
+                noRoutesMessage.style.display = 'block'; // Mostrar mensaje si no hay rutas
+                savedRoutesContainer.appendChild(noRoutesMessage); // Asegurarse de que esté en el contenedor
+                return;
+            } else {
+                noRoutesMessage.style.display = 'none'; // Ocultar mensaje si hay rutas
+            }
+
+            // Agrupar rutas por categoría
+            const routesByCategory = routes.reduce((acc, route) => {
+                const category = route.category || 'Sin Categoría'; // Asegura que siempre haya una categoría
+                if (!acc[category]) {
+                    acc[category] = [];
+                }
+                acc[category].push(route);
+                return acc;
+            }, {});
+
+            // Ordenar las categorías alfabéticamente
+            const sortedCategories = Object.keys(routesByCategory).sort();
+
+            sortedCategories.forEach(category => {
+                const categoryHeader = document.createElement('div');
+                categoryHeader.classList.add('category-header');
+                categoryHeader.innerHTML = `
+                    <span>${category} (${routesByCategory[category].length})</span>
+                    <span class="toggle-icon">></span>
+                `;
+                savedRoutesContainer.appendChild(categoryHeader);
+
+                const categoryRoutesList = document.createElement('ul');
+                categoryRoutesList.classList.add('category-routes-list');
+                savedRoutesContainer.appendChild(categoryRoutesList);
+
+                // Event listener para expandir/contraer la categoría
+                categoryHeader.addEventListener('click', () => {
+                    categoryRoutesList.classList.toggle('active');
+                    categoryHeader.classList.toggle('active'); // Para rotar el icono
+                });
+
+                routesByCategory[category].forEach(route => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>${route.name}</span>`;
+
+                    const buttonContainer = document.createElement('div');
+                    buttonContainer.style.display = 'flex'; // Para alinear botones
+
+                    const loadButton = document.createElement('button');
+                    loadButton.textContent = 'Cargar';
+                    loadButton.onclick = (event) => {
+                        event.stopPropagation(); // Evita que el click se propague al header de categoría
+                        loadRoute(route);
+                    };
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = 'Eliminar';
+                    deleteButton.classList.add('delete-btn'); // Clase para estilos específicos
+                    deleteButton.onclick = (event) => {
+                        event.stopPropagation(); // Evita que el click se propague al header de categoría
+                        deleteRoute(route.name, route.category); // Pasar también la categoría
+                    };
+
+                    buttonContainer.appendChild(loadButton);
+                    buttonContainer.appendChild(deleteButton);
+                    li.appendChild(buttonContainer);
+                    categoryRoutesList.appendChild(li);
+                });
+            });
+        }
+
+        function loadRoute(route) {
+            showHeader(); // Asegura que el header se muestre al cargar una ruta
+            clearCurrentRoute(); // Limpiar la ruta actual antes de cargar una nueva
+            waypoints = route.waypoints.map(wp => L.latLng(wp.lat, wp.lng));
+            routeNameInput.value = route.name;
+            routeCategoryInput.value = route.category; // Cargar la categoría
+            updateRoutingControl(); // Actualizar el control de rutas con los nuevos waypoints
+            if (waypoints.length > 0) {
+                // Ajustar el mapa para que se vea toda la ruta
+                const latLngs = waypoints.map(wp => [wp.lat, wp.lng]);
+                map.fitBounds(L.latLngBounds(latLngs).pad(0.5));
+            }
+            // Cerrar el menú móvil si está abierto en mobile
+            if (window.innerWidth <= 768 && mobileMenuOverlay.classList.contains('active')) {
+                mobileMenuClose.click();
+            }
+            // Ocultar el dropdown de categorías si está abierto
+            categoryDropdown.style.display = 'none';
+            setTimeout(hideHeader, 5000); // Vuelve a ocultar después de 5 segundos
+        }
+
+        function deleteRoute(nameToDelete, categoryToDelete) { // Recibe también la categoría
+            // Ya no es necesario un confirm aquí, se maneja con los botones de confirmación
+            let routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+            // Filtrar rutas por nombre Y categoría para evitar eliminar rutas con nombres iguales en categorías diferentes
+            routes = routes.filter(route => !(route.name === nameToDelete && route.category === categoryToDelete));
+            localStorage.setItem('savedRoutes', JSON.stringify(routes));
+            renderSavedRoutes();
+            populateCategoryDropdown(); // Actualiza el dropdown después de eliminar una ruta
+            // Si la ruta eliminada es la que está actualmente cargada, limpiarla
+            if (routeNameInput.value === nameToDelete && routeCategoryInput.value === categoryToDelete) {
+                clearCurrentRoute();
+            }
+        }
+
+        function generateGoogleMapsUrl() {
+            if (waypoints.length < 2) {
+                return null; // O manejar el error
+            }
+
+            const origin = `${waypoints[0].lat},${waypoints[0].lng}`;
+            const destination = `${waypoints[waypoints.length - 1].lat},${waypoints[waypoints.length - 1].lng}`;
+            let waypointsParam = '';
+
+            if (waypoints.length > 2) {
+                // Los waypoints intermedios en Google Maps se unen con '/'
+                const intermediateWaypoints = waypoints.slice(1, -1).map(wp => `${wp.lat},${wp.lng}`).join('/');
+                waypointsParam = `/${intermediateWaypoints}`; // Se añade directamente después del origen o antes del destino
+            }
+
+            // La URL correcta de Google Maps para rutas es /maps/dir/
+            // El formato es: /maps/dir/origen/waypoint1/waypoint2/.../destino
+            return `https://www.google.com/maps/dir/${origin}${waypointsParam}/${destination}`;
+        }
+
+
+        function openInGoogleMaps() {
+            const googleMapsUrl = generateGoogleMapsUrl();
+            if (googleMapsUrl) {
+                window.open(googleMapsUrl, '_blank');
+            } else {
+                alert('Necesitas al menos dos puntos para abrir en Google Maps.');
+            }
+        }
+
+        function shareOnWhatsApp() {
+            const googleMapsUrl = generateGoogleMapsUrl();
+            if (googleMapsUrl) {
+                const currentRouteName = routeNameInput.value.trim() || 'Mi Ruta';
+                const message = `¡Hola! Aquí te comparto mi ruta: "${currentRouteName}". Puedes verla aquí: ${googleMapsUrl}`;
+                const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                window.open(whatsappUrl, '_blank');
+            } else {
+                alert('Necesitas al menos dos puntos para compartir la ruta.');
+            }
+        }
+
+        function clearAllData() {
+            // La confirmación ya se maneja en el UI
+            localStorage.clear();
+            alert('Caché y rutas guardadas borradas correctamente.');
+
+            clearCurrentRoute(); // Limpia la ruta actual en el mapa
+            renderSavedRoutes(); // Actualiza la lista de rutas guardadas (mostrará "No hay rutas guardadas")
+            populateCategoryDropdown(); // Asegura que el dropdown de categorías también se vacíe
+        }
+
+        // Nueva función para poblar el dropdown de categorías
+        function populateCategoryDropdown() {
+            categoryList.innerHTML = ''; // Limpiar lista existente
+            const routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+            const categories = new Set(routes.map(route => route.category || 'Sin Categoría')); // Usa un Set para categorías únicas
+
+            if (categories.size === 0) {
+                noCategoriesMessageDropdown.style.display = 'block';
+            } else {
+                noCategoriesMessageDropdown.style.display = 'none';
+                Array.from(categories).sort((a, b) => a.localeCompare(b)).forEach(cat => { // Convertir a Array y ordenar alfabéticamente
+                    const li = document.createElement('li');
+                    li.textContent = cat;
+                    li.style.padding = '8px 10px';
+                    li.style.cursor = 'pointer';
+                    li.style.borderBottom = '1px solid #eee';
+                    li.style.whiteSpace = 'nowrap'; // Evita que el texto se rompa
+                    li.style.overflow = 'hidden'; // Oculta el desbordamiento
+                    li.style.textOverflow = 'ellipsis'; // Añade puntos suspensivos
+
+                    li.addEventListener('mouseenter', () => {
+                        li.style.backgroundColor = '#f0f0f0';
+                    });
+                    li.addEventListener('mouseleave', () => {
+                        li.style.backgroundColor = 'white';
+                    });
+                    li.addEventListener('click', () => {
+                        routeCategoryInput.value = cat; // Asigna la categoría seleccionada al input
+                        categoryDropdown.style.display = 'none'; // Oculta el dropdown
+                    });
+                    categoryList.appendChild(li);
+                });
+            }
+        }
+
+        // Función para ocultar el encabezado
+        function hideHeader() {
+            header.classList.add('hidden');
+            document.body.classList.add('header-hidden-adjust'); // Sube el body
+            // Ya no es necesario ajustar el 'top' de toggleInstructionsBtn aquí, es fijo.
+        }
+
+        // Función para mostrar el encabezado
+        function showHeader() {
+            header.classList.remove('hidden');
+            document.body.classList.remove('header-hidden-adjust');
+            // Ya no es necesario restaurar el 'top' de toggleInstructionsBtn aquí, es fijo.
+        }
+
+        // Función para mostrar la información de la app
+        function showAppInfo() {
+            welcomeButtonsDiv.style.display = 'none'; // Oculta los botones de bienvenida
+            appInfoContainer.style.display = 'block'; // Muestra el contenedor de información
+            welcomeMessageContent.style.maxWidth = '500px'; // Ajusta el ancho para que la info quepa bien
+        }
+
+        // Función para ocultar la información de la app y mostrar los botones
+        function hideAppInfo() {
+            appInfoContainer.style.display = 'none'; // Oculta el contenedor de información
+            welcomeButtonsDiv.style.display = 'flex'; // Muestra los botones de bienvenida (siempre estaban como flex)
+            welcomeMessageContent.style.maxWidth = '90%'; // Restaura el ancho original o uno adecuado
+        }
+
+
+        // --- Event Listeners ---
+        addPointBtn.addEventListener('click', () => {
+            isAddingPoints = !isAddingPoints;
+            if (isAddingPoints) {
+                addPointBtn.textContent = 'Haz clic en el mapa para añadir puntos... (Modo activo)';
+                addPointBtn.style.backgroundColor = '#28a745'; // Color verde para indicar modo activo
+                map.on('click', onMapClick); // Habilitar clics en el mapa
+                // Si estamos en móvil y el menú está abierto, lo cerramos al activar el modo de añadir puntos
+                if (window.innerWidth <= 768 && mobileMenuOverlay.classList.contains('active')) {
+                    mobileMenuClose.click();
+                }
+            } else {
+                addPointBtn.textContent = 'Añadir Punto (Haz clic en el mapa)';
+                addPointBtn.style.backgroundColor = '#007bff'; // Color azul por defecto
+                map.off('click', onMapClick); // Deshabilitar clics en el mapa
+            }
+            // Asegúrate de que el dropdown de categorías se cierre
+            categoryDropdown.style.display = 'none';
+        });
+
+        function onMapClick(e) {
+            if (isAddingPoints) {
+                addWaypoint(e.latlng);
+            }
+        }
+
+        clearRouteBtn.addEventListener('click', clearCurrentRoute);
+        saveRouteBtn.addEventListener('click', saveRoute);
+        openInGoogleMapsBtn.addEventListener('click', openInGoogleMaps);
+        shareOnWhatsAppBtn.addEventListener('click', shareOnWhatsApp);
+
+        // Nuevos Event Listeners para Borrar Caché y Rutas
+        clearDataText.addEventListener('click', () => {
+            clearDataText.style.display = 'none'; // Oculta el texto
+            clearDataConfirmation.style.display = 'block'; // Muestra la confirmación
+            categoryDropdown.style.display = 'none'; // Cierra el dropdown de categorías
+        });
+
+        confirmClearDataBtn.addEventListener('click', () => {
+            clearAllData(); // Llama a la función existente para borrar todo
+            clearDataConfirmation.style.display = 'none'; // Oculta la confirmación
+            clearDataText.style.display = 'block'; // Vuelve a mostrar el texto
+        });
+
+        cancelClearDataBtn.addEventListener('click', () => {
+            clearDataConfirmation.style.display = 'none'; // Oculta la confirmación
+            clearDataText.style.display = 'block'; // Vuelve a mostrar el texto
+        });
+
+        // Event Listeners para el dropdown de categorías
+        categoryDropdownToggle.addEventListener('click', (event) => {
+            event.stopPropagation(); // Evita que el clic se propague y cierre el dropdown
+            populateCategoryDropdown(); // Actualiza la lista antes de mostrarla
+            categoryDropdown.style.display = categoryDropdown.style.display === 'none' ? 'block' : 'none';
+        });
+
+        // Cierra el dropdown si se hace clic fuera de él
+        document.addEventListener('click', (event) => {
+            if (!categoryDropdown.contains(event.target) && event.target !== categoryDropdownToggle && event.target !== routeCategoryInput) {
+                categoryDropdown.style.display = 'none';
+            }
+        });
+        // Cierra el dropdown si se enfoca el input pero no se hace clic en el toggle (por ejemplo, con Tab)
+        routeCategoryInput.addEventListener('focus', () => {
+            categoryDropdown.style.display = 'none';
+        });
+
+
+        // Lógica para mostrar/ocultar el mapa y controles
+        function showMapAndControls() {
+            mapContainer.style.display = 'block'; // Muestra el mapa
+            mapControls.style.display = 'flex'; // Muestra los controles
+            sidebar.style.display = 'flex'; // Asegura que el sidebar esté visible
+            // Asegura que los controles estén en el sidebar si se inician en desktop
+            if (window.innerWidth > 768 && mapControls.parentNode !== originalParentOfMapControls) {
+                originalParentOfMapControls.appendChild(mapControls);
+            } else if (window.innerWidth <= 768) {
+                // En móvil, los controles estarán ocultos inicialmente en el sidebar
+                mapControls.style.display = 'none';
+            }
+            initMap(); // Inicializa el mapa
+            renderSavedRoutes(); // Carga y muestra las rutas guardadas
+            populateCategoryDropdown(); // Carga las categorías al inicio
+            // Oculta el panel de instrucciones y su botón al iniciar el mapa
+            routeInstructionsPanel.style.display = 'none';
+            toggleInstructionsBtn.style.display = 'none';
+            // Oculta el mensaje de bienvenida
+            welcomeMessageOverlay.classList.remove('active');
+            welcomeMessageOverlay.addEventListener('transitionend', function handler() {
+                welcomeMessageOverlay.style.display = 'none';
+                welcomeMessageOverlay.removeEventListener('transitionend', handler);
+            });
+
+            // Oculta el header después de 5 segundos
+            setTimeout(hideHeader, 5000);
+        }
+
+
+        // Eventos para el menú hamburguesa (móvil)
+        hamburgerMenu.addEventListener('click', () => {
+            // Cuando el menú hamburguesa se abre, siempre muestra el header temporalmente
+            showHeader();
+            mobileMenuOverlay.style.display = 'flex'; // Muestra el overlay
+            setTimeout(() => {
+                mobileMenuOverlay.classList.add('active'); // Activa la animación de deslizamiento
+                // Mueve los controles al placeholder del menú móvil
+                mobileControlsPlaceholder.appendChild(mapControls);
+                mapControls.style.display = 'flex'; // Asegura que los controles se muestren en el menú
+                sidebar.style.display = 'none'; // Oculta el sidebar principal
+            }, 10); // Pequeño retardo para que la transición sea visible
+            categoryDropdown.style.display = 'none'; // Asegura que el dropdown se cierre al abrir el menú móvil
+        });
+
+        mobileMenuClose.addEventListener('click', () => {
+            mobileMenuOverlay.classList.remove('active'); // Desactiva la animación
+            mobileMenuContent.addEventListener('transitionend', function handler() {
+                if (!mobileMenuOverlay.classList.contains('active')) {
+                    mobileMenuOverlay.style.display = 'none'; // Oculta el overlay cuando la transición termina
+                    // Mueve los controles de vuelta al sidebar original si es desktop
+                    if (window.innerWidth > 768) {
+                        if (originalParentOfMapControls && mapControls.parentNode === mobileControlsPlaceholder) {
+                            originalParentOfMapControls.appendChild(mapControls);
+                        }
+                        mapControls.style.display = 'flex'; // Muestra los controles en el sidebar de desktop
+                        sidebar.style.display = 'flex'; // Asegura que el sidebar esté visible en desktop
+                    } else { // Si es móvil, los oculta de nuevo en el sidebar principal
+                        if (originalParentOfMapControls && mapControls.parentNode === mobileControlsPlaceholder) {
+                            originalParentOfMapControls.appendChild(mapControls); // Mover de vuelta para mantener la estructura
+                        }
+                        mapControls.style.display = 'none';
+                        sidebar.style.display = 'none'; // El sidebar sigue oculto en móvil
+                    }
+                }
+                mobileMenuContent.removeEventListener('transitionend', handler);
+            });
+            categoryDropdown.style.display = 'none'; // Asegura que el dropdown se cierre al cerrar el menú móvil
+            setTimeout(hideHeader, 500); // Pequeño retraso para que la transición del menú termine antes de ocultar header
+        });
+
+        // Evento para el botón de alternar instrucciones
+        toggleInstructionsBtn.addEventListener('click', () => {
+            showHeader(); // Muestra el header temporalmente
+            if (routeInstructionsPanel.style.display === 'none' || routeInstructionsPanel.style.display === '') {
+                routeInstructionsPanel.style.display = 'block';
+                toggleInstructionsBtn.textContent = 'Ocultar Instrucciones';
+            } else {
+                routeInstructionsPanel.style.display = 'none';
+                toggleInstructionsBtn.textContent = 'Mostrar Instrucciones';
+            }
+            categoryDropdown.style.display = 'none'; // Cierra el dropdown de categorías
+            setTimeout(hideHeader, 5000); // Vuelve a ocultar después de 5 segundos
+        });
+
+        // Manejo de la redimensión de la ventana (desktop <-> mobile)
+        window.addEventListener('resize', () => {
+            if (map) {
+                map.invalidateSize(); // Asegura que el mapa se redibuje correctamente
+                if (window.innerWidth > 768) { // Si es desktop
+                    if (mobileMenuOverlay.classList.contains('active')) { // Si el menú móvil está abierto, ciérralo
+                        mobileMenuClose.click();
+                    }
+                    if (mapControls.parentNode !== originalParentOfMapControls) {
+                        originalParentOfMapControls.appendChild(mapControls);
+                    }
+                    mapControls.style.display = 'flex'; // Muestra los controles en el sidebar
+                    sidebar.style.display = 'flex'; // Asegura que el sidebar esté visible
+                    showHeader(); // Asegura que el header esté visible en desktop
+                } else { // Si es móvil
+                    if (mapControls.parentNode === originalParentOfMapControls) { // Si los controles están en el sidebar, ocúltalos
+                        mapControls.style.display = 'none';
+                    }
+                    // El sidebar debe estar oculto en móvil a menos que se abra el menú
+                    if (!mobileMenuOverlay.classList.contains('active')) {
+                        sidebar.style.display = 'none';
+                    }
+                    // En móvil, el header se ocultará si el menú no está activo
+                    if (!mobileMenuOverlay.classList.contains('active')) {
+                        hideHeader();
+                    }
+                }
+            }
+            categoryDropdown.style.display = 'none'; // Cierra el dropdown de categorías al redimensionar
+        });
+
+        // Funciones para el mensaje de bienvenida
+        function hideWelcomeMessage() {
+            welcomeMessageOverlay.classList.remove('active');
+            welcomeMessageContent.addEventListener('transitionend', function handler() {
+                if (!welcomeMessageOverlay.classList.contains('active')) {
+                    welcomeMessageOverlay.style.display = 'none';
+                }
+                welcomeMessageContent.removeEventListener('transitionend', handler);
+            });
+        }
+
+        welcomeSearchBtn.addEventListener('click', () => {
+            hideAppInfo(); // Asegura que la info se oculte antes de cualquier acción
+            showMapAndControls(); // Inicia el mapa y muestra controles
+            hideWelcomeMessage();
+            if (window.innerWidth <= 768) { // En móvil, abre el menú y enfoca el buscador
+                hamburgerMenu.click();
+                setTimeout(() => {
+                    const searchInput = document.querySelector('.leaflet-control-geocoder-form input');
+                    if (searchInput) {
+                        searchInput.focus();
+                    }
+                }, 400); // Pequeño retraso para que el menú se abra completamente
+            } else { // En desktop, solo enfoca el buscador
+                const searchInput = document.querySelector('.leaflet-control-geocoder-form input');
+                if (searchInput) {
+                    searchInput.focus();
+                }
+            }
+        });
+
+        welcomeSavedRoutesBtn.addEventListener('click', () => {
+            hideAppInfo(); // Asegura que la info se oculte antes de cualquier acción
+            showMapAndControls(); // Inicia el mapa y muestra controles
+            hideWelcomeMessage();
+            if (window.innerWidth <= 768) { // En móvil, abre el menú y se desplaza a las rutas guardadas
+                hamburgerMenu.click();
+                setTimeout(() => {
+                    const savedRoutesSection = document.getElementById('savedRoutesContainer');
+                    if (savedRoutesSection) {
+                        savedRoutesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        // Opcional: expandir la primera categoría si está colapsada
+                        const firstCategoryHeader = savedRoutesSection.querySelector('.category-header');
+                        if (firstCategoryHeader && !firstCategoryHeader.classList.contains('active')) {
+                            firstCategoryHeader.click();
+                        }
+                    }
+                }, 400);
+            } else { // En desktop, solo se desplaza a las rutas guardadas
+                const savedRoutesSection = document.getElementById('savedRoutesContainer');
+                if (savedRoutesSection) {
+                    savedRoutesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const firstCategoryHeader = savedRoutesSection.querySelector('.category-header');
+                    if (firstCategoryHeader && !firstCategoryHeader.classList.contains('active')) {
+                        firstCategoryHeader.click();
+                    }
+                }
+            }
+        });
+
+        welcomeNewRouteBtn.addEventListener('click', () => {
+            hideAppInfo(); // Asegura que la info se oculte antes de cualquier acción
+            showMapAndControls(); // Inicia el mapa y muestra controles
+            hideWelcomeMessage();
+            clearCurrentRoute(); // Limpia cualquier ruta existente para empezar una nueva
+            if (window.innerWidth <= 768) { // En móvil, abre el menú y enfoca el botón de añadir punto
+                hamburgerMenu.click();
+                setTimeout(() => {
+                    addPointBtn.focus();
+                }, 400);
+            } else { // En desktop, solo enfoca el botón de añadir punto
+                addPointBtn.focus();
+            }
+        });
+
+        // Event Listeners para el botón de información
+        welcomeInfoBtn.addEventListener('click', showAppInfo);
+        closeAppInfoBtn.addEventListener('click', hideAppInfo);
+
+
+        // Inicializa el mensaje de bienvenida al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            welcomeMessageOverlay.style.display = 'flex';
+            setTimeout(() => {
+                welcomeMessageOverlay.classList.add('active');
+            }, 100);
+            // Asegura que los controles del mapa y el sidebar estén ocultos en móvil al inicio
+            if (window.innerWidth <= 768) {
+                mapControls.style.display = 'none';
+                sidebar.style.display = 'none';
+            }
+            populateCategoryDropdown(); // Asegura que se cargue al inicio
+        });
+
+        // Si el usuario interactúa con la cabecera (por ejemplo, con el menú hamburguesa),
+        // la cabecera se mostrará brevemente y luego se ocultará de nuevo.
+        header.addEventListener('mouseover', showHeader); // Muestra al pasar el ratón
+        header.addEventListener('mouseout', () => setTimeout(hideHeader, 2000)); // Oculta 2s después de quitar el ratón
+
+    </script>
+</body>
+</html>

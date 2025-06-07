@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galería de Rutas Personalizadas</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'], // Usar Inter como fuente principal
+            },
+          }
+        }
+      }
+    </script>
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <!-- Estilos Personalizados (incrustados) -->
+    <style>
+        /*
+         * Estilos personalizados para la aplicación Visor de Rutas (Galería Simplificada).
+         * Estos estilos se utilizan junto con Tailwind CSS.
+         */
+
+        html {
+            height: 100%;
+        }
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            height: 100%;
+            overflow-y: auto; /* Permite el scroll en el body si el contenido es demasiado largo */
+            display: flex;
+            flex-direction: column; /* Organiza header y main-content-container verticalmente */
+            background-color: #f0f2f5; /* Color de fondo general para la página */
+        }
+        header {
+            background-color: #ffffff; /* Fondo blanco para el encabezado */
+            padding: 15px 20px;
+            border-bottom: 1px solid #e2e8f0; /* Borde sutil */
+            text-align: center;
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Sombra ligera */
+        }
+
+        /* Contenedor principal para el contenido de la aplicación (solo sidebar) */
+        .main-content-container {
+            display: flex;
+            flex-grow: 1; /* Ocupa el espacio restante después del header */
+            padding: 25px; /* Padding general para el contenedor principal */
+            justify-content: center; /* Centra el contenido horizontalmente */
+            align-items: flex-start; /* Alinea el contenido al inicio verticalmente */
+            overflow-y: auto; /* Permite el scroll en este contenedor si el contenido es demasiado largo */
+        }
+        #sidebar { /* Es el área principal de la interfaz, actuando como un panel de galería */
+            width: 100%; /* Ocupa el 100% del ancho en móvil */
+            max-width: 550px; /* Ancho máximo para la interfaz en desktop */
+            background-color: #ffffff; /* Fondo blanco para el panel */
+            border-radius: 12px; /* Bordes más redondeados */
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); /* Sombra más pronunciada */
+            padding: 30px; /* Padding interno del panel */
+            display: flex;
+            flex-direction: column;
+            min-height: 80vh; /* Asegura que tenga una altura mínima */
+        }
+
+        .input-group {
+            margin-bottom: 20px; /* Más espacio entre grupos de entrada */
+            position: relative;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px; /* Más espacio debajo de las etiquetas */
+            font-weight: 600; /* Un poco más de negrita */
+            color: #334155; /* Color de texto más oscuro */
+        }
+        .input-group input[type="text"] {
+            width: calc(100% - 2px); /* Ajuste para el borde */
+            padding: 12px; /* Más padding para los inputs */
+            border: 1px solid #cbd5e1; /* Borde más suave */
+            border-radius: 8px; /* Bordes redondeados */
+            outline: none;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); /* Sombra interna sutil */
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .input-group input[type="text"]:focus {
+            border-color: #3b82f6; /* Azul más vibrante al enfocar */
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.25); /* Anillo de enfoque azul */
+        }
+        .input-group input#routeCategory {
+            width: calc(100% - 2px - 40px); /* Ajuste para el icono del dropdown */
+        }
+
+        #savedRoutesContainer {
+            margin-top: 25px; /* Más espacio superior */
+            flex-grow: 1; /* Permite que la lista de rutas ocupe el espacio restante */
+            padding-right: 15px; /* Más padding para evitar que la barra de scroll se superponga */
+            overflow-y: auto; /* Scroll para la lista de rutas */
+        }
+
+        /* Sección de ruta seleccionada (ELIMINADA de HTML) */
+
+        /* Estilos para el texto y botones de borrar caché */
+        #clearDataText {
+            cursor: pointer;
+            color: #ef4444; /* Rojo para borrar */
+            text-decoration: underline;
+            margin-top: 30px; /* Más espacio superior */
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+        #clearDataText:hover {
+            color: #dc2626; /* Rojo más oscuro al pasar el ratón */
+        }
+        #clearDataConfirmation {
+            display: none;
+            margin-top: 20px; /* Más espacio superior */
+            text-align: center;
+            background-color: #fef2f2; /* Fondo muy claro de advertencia */
+            border: 1px solid #fca5a5; /* Borde de advertencia */
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            opacity: 0;
+            transform: translateY(15px);
+            transition: all 0.3s ease-out;
+        }
+        #clearDataConfirmation.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #clearDataConfirmation p {
+            font-size: 0.95rem;
+            margin-bottom: 15px;
+            color: #be123c; /* Rojo más oscuro */
+        }
+        #clearDataConfirmation p.font-bold {
+            font-size: 1.1rem;
+            color: #9f1239;
+        }
+        #confirmClearDataBtn, #cancelClearDataBtn {
+            display: inline-block;
+            width: auto;
+            padding: 10px 18px; /* Más padding */
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            margin: 0 8px; /* Más espacio entre botones */
+            font-weight: 500;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        #confirmClearDataBtn {
+            background-color: #ef4444; /* Rojo fuerte */
+            color: white;
+        }
+        #confirmClearDataBtn:hover {
+            background-color: #dc2626;
+            transform: translateY(-1px);
+        }
+        #cancelClearDataBtn {
+            background-color: #64748b; /* Gris azulado */
+            color: white;
+        }
+        #cancelClearDataBtn:hover {
+            background-color: #4b5563;
+            transform: translateY(-1px);
+        }
+
+
+        /* Estilos para Categorías */
+        .category-header {
+            background-color: #e2e8f0; /* Gris azulado claro */
+            padding: 12px 18px;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 700; /* Más negrita */
+            color: #1f2937; /* Color de texto oscuro */
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Sombra ligera */
+        }
+        .category-header:hover {
+            background-color: #cbd5e1; /* Fondo más oscuro al pasar el ratón */
+            transform: translateY(-1px); /* Efecto de elevación sutil */
+        }
+        .category-header .toggle-icon {
+            font-size: 1.3em; /* Icono un poco más grande */
+            transition: transform 0.2s ease;
+        }
+        .category-header.active .toggle-icon {
+            transform: rotate(90deg); /* Gira el ">" cuando está activo */
+        }
+        .category-routes-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: none; /* Oculto por defecto */
+            border: 1px solid #e2e8f0; /* Borde sutil */
+            border-top: none; /* Para que parezca una continuación del header */
+            border-radius: 0 0 8px 8px; /* Bordes redondeados solo en la parte inferior */
+            background-color: #f8fafc; /* Fondo muy claro */
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.03); /* Sombra interna sutil */
+        }
+        .category-routes-list.active {
+            display: block; /* Se muestra cuando la categoría está activa */
+        }
+        .category-routes-list li {
+            background-color: #ffffff; /* Fondo blanco para cada elemento de la lista */
+            padding: 12px 18px;
+            margin-bottom: 0;
+            border-radius: 0;
+            border-bottom: 1px solid #f1f5f9; /* Borde más claro */
+            display: flex;
+            flex-wrap: wrap; /* Permite que el botón se envuelva si hay poco espacio */
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.98rem;
+            color: #334155;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .category-routes-list li:hover {
+            background-color: #eff6ff; /* Azul muy claro al pasar el ratón */
+        }
+        .category-routes-list li.selected {
+            background-color: #dbeafe; /* Azul claro para la ruta seleccionada */
+            font-weight: 600;
+            color: #2563eb; /* Azul más fuerte */
+        }
+        .category-routes-list li:last-child {
+            border-bottom: none;
+        }
+        .category-routes-list li .route-name {
+            flex-grow: 1; /* Permite que el nombre de la ruta ocupe el espacio disponible */
+            margin-right: 10px; /* Espacio entre el nombre y los botones */
+        }
+        .category-routes-list li .route-actions-inline {
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Espacio entre botones */
+            margin-top: 0; /* Reiniciar margen superior */
+            flex-shrink: 0; /* Evita que los botones se encojan */
+        }
+        .category-routes-list li .route-actions-inline button {
+            background-color: #10b981; /* Verde esmeralda para Google Maps */
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            white-space: nowrap; /* Evita que el texto del botón se rompa */
+        }
+        .category-routes-list li .route-actions-inline button:hover {
+            background-color: #059669; /* Verde más oscuro */
+            transform: translateY(-1px);
+        }
+        /* Eliminar estilos para .delete-btn-inline ya que el botón se ha quitado */
+
+
+        /* Notificaciones Toast */
+        #toastContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background-color: #333;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            font-size: 0.9em;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadein 0.5s forwards, fadeout 0.5s forwards 2.5s;
+        }
+        @keyframes fadein {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeout {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-20px); }
+        }
+
+        /* Modales de Confirmación (importación) */
+        #importConfirmationOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2500;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
+        }
+        #importConfirmationOverlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        #importConfirmationContent {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px; /* Más redondeado */
+            text-align: center;
+            max-width: 450px; /* Un poco más ancho */
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3); /* Sombra más intensa */
+            transform: scale(0.9);
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        #importConfirmationOverlay.active #importConfirmationContent {
+            transform: scale(1);
+            opacity: 1;
+        }
+        #importConfirmationContent p {
+            color: #333;
+            margin-bottom: 25px; /* Más espacio */
+            font-size: 1.05em;
+        }
+        #importConfirmationContent p.font-bold {
+            font-weight: 700;
+            font-size: 1.2em; /* Más grande */
+        }
+        #importConfirmationContent button {
+            background-color: #3b82f6; /* Azul consistente */
+            color: white;
+            border: none;
+            padding: 12px 22px; /* Más padding */
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 0 6px; /* Ajuste de margen */
+            font-size: 1.05em;
+            font-weight: 500;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        #importConfirmationContent button:hover {
+            background-color: #2563eb;
+            transform: translateY(-1px);
+        }
+        #importConfirmationContent button#confirmOverwriteImportBtn {
+            background-color: #dc2626; /* Rojo para sobrescribir */
+        }
+        #importConfirmationContent button#confirmOverwriteImportBtn:hover {
+            background-color: #b91c1c;
+        }
+        #importConfirmationContent button#confirmMergeImportBtn {
+             background-color: #3b82f6; /* Azul para fusionar */
+        }
+        #importConfirmationContent button#confirmMergeImportBtn:hover {
+             background-color: #2563eb;
+        }
+        #importConfirmationContent button#cancelImportBtn {
+            background-color: #64748b; /* Gris azulado para cancelar */
+        }
+        #importConfirmationContent button#cancelImportBtn:hover {
+            background-color: #4b5563;
+        }
+
+        /* Media queries para responsividad */
+        @media (max-width: 768px) {
+            .main-content-container {
+                padding: 15px; /* Reduce padding en móviles */
+            }
+            #sidebar {
+                padding: 20px; /* Reduce padding interno del sidebar */
+                border-radius: 8px; /* Menos redondeado en móvil */
+            }
+            header {
+                padding: 12px 15px;
+            }
+            .category-routes-list li {
+                flex-direction: column; /* Apila el nombre y los botones en móvil */
+                align-items: flex-start; /* Alinea los elementos al inicio */
+                gap: 8px; /* Espacio entre el nombre y los botones apilados */
+            }
+            .category-routes-list li .route-actions-inline {
+                width: 100%; /* Ocupa todo el ancho disponible */
+                justify-content: flex-end; /* Alinea los botones a la derecha */
+            }
+        }
+		     /* Mostrar instrucciones */
+		    #instrucciones {
+            display: none; /* Oculta el bloque de instrucciones inicialmente */
+        }
+    </style>
+</head>
+<body>
+    <div id="toastContainer" class="fixed top-4 right-4 z-[3000] space-y-2"></div>
+
+    <header class="p-3 md:p-4 border-b border-gray-200 text-center relative z-10">
+        <p class="text-xl md:text-2xl font-bold text-gray-700">Galería de Rutas Personalizadas</p>
+    </header>
+
+    <div class="main-content-container">
+        <div id="sidebar" class="w-full">
+            <!-- Buscador de Rutas -->
+            <div class="input-group mb-4">
+                <label for="routeSearch" class="block text-gray-700 font-semibold mb-2">Buscar Rutas:</label>
+                <input type="text" id="routeSearch" placeholder="Escribe para buscar rutas o categorías" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <!-- Entrada de Categoría y Dropdown -->
+            <div class="input-group mb-4 relative">
+                <label for="routeCategory" class="block text-gray-700 font-semibold mb-2">Categoría de la Ruta:</label>
+                <div class="flex items-center">
+                    <input type="text" id="routeCategory" placeholder="Nombra o elige Categoría" class="flex-grow p-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <span id="categoryDropdownToggle" class="bg-gray-200 hover:bg-gray-300 p-2 rounded-r-md cursor-pointer text-xl text-gray-600 transition-colors duration-200" title="Seleccionar categoría existente">
+                        <i class="fas fa-book-open"></i>
+                    </span>
+                </div>
+                <div id="categoryDropdown" class="hidden absolute w-full mt-1 border border-gray-300 rounded-md bg-white shadow-lg max-h-40 overflow-y-auto z-10">
+                    <ul id="categoryList" class="list-none p-0 m-0">
+                        </ul>
+                    <p id="noCategoriesMessageDropdown" class="text-center text-gray-500 p-3 hidden">No hay categorías guardadas.</p>
+                </div>
+            </div>
+
+            <h2 class="text-xl font-bold text-gray-800 mt-6 mb-4 border-t border-gray-200 pt-4">Tus Rutas Guardadas:</h2>
+            <div id="savedRoutesContainer" class="flex-grow overflow-y-auto pr-2 -mr-2">
+                <p id="noRoutesMessage" class="text-gray-500 text-center py-4 hidden">No hay rutas guardadas.</p>
+                </div>
+
+            <p id="clearDataText" class="text-blue-600 hover:text-blue-800 underline text-center cursor-pointer mt-6 text-sm">Borrar caché y rutas</p>
+
+            <div id="clearDataConfirmation" class="mt-4 text-center p-3 bg-red-50 border border-red-200 rounded-md">
+                <p class="text-red-700 font-bold mb-3">¡ADVERTENCIA! ¿ESTÁ SEGURO?</p>
+                <p class="text-red-600 mb-4">Esta acción borrará todas las rutas y categorías creadas.</p>
+                <div class="flex justify-center gap-3">
+                    <button id="confirmClearDataBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                        Sí, borrar todo
+                    </button>
+                    <button id="cancelClearDataBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-6 mt-6 text-center space-y-3">
+                <p class="font-bold text-gray-700 mb-3">Añadir Rutas:</p>
+				<!-- Mostrar instrucciones de carga de archivo -->
+				   <a href="#" id="mostrarInstrucciones">→ Instrucciones de carga de rutas</a>
+                        <div id="instrucciones" style="display: none;">
+                            <p>•	1.- Asegúrate de haber descargado tu archivo de rutas .json
+							   •    2.- Regularmente las rutas las proporciona tu Empresa pregunta y descargalo
+                               •	3.- Identifica la ruta en donde se guardo o se almaceno dentro de tu dispositivo
+                               •	4.- Procede a la instalación y observa las instrucciones
+                               •	5.- Esperamos que esta APP te facilite el camino y puedas concentrarte en lo importante!! que es manejar
+							 </p>
+							
+							<p>Descarga de prueba</p>
+							<a href="https://drive.google.com/file/d/1aCiFNXKUVSQ-V7YIADth8hHOjQKiICBL/view?usp=sharing" target="_blank">→ archivo.JSON</a>.</p>
+							<p>Esta App se puede compartir pero si la quieren usar en alguna empresa y requieren la carga de sus rutas más frecuentes contactenos!! +52 81 12371397 vía WhatsApp</a></p>
+							
+                            
+                        </div>
+				<!-- cerrar Mostrar instrucciones de carga de archivo -->
+                
+				
+				<input type="file" id="importRoutesInput" accept=".json" class="hidden">
+                <button id="triggerImportBtn" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 rounded-md transition-colors duration-200">
+                    <i class="fas fa-upload mr-2"></i>Cargar Rutas (Archivo)
+                </button>
+				
+				<button id="sidebarShareAppBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-md transition-colors duration-200">
+                    <i class="fas fa-share-alt mr-2"></i>Compartir esta App
+                </button>
+				
+				<button id="exportRoutesWhatsAppBtn" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-semibold py-3 rounded-md transition-colors duration-200">
+                    <i class="fas fa-cloud-upload-alt mr-2"></i>Exportar Rutas
+                </button>
+				 
+                
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Confirmation Modal -->
+    <div id="importConfirmationOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex justify-center items-center z-[2500]">
+        <div id="importConfirmationContent" class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-11/12 transform scale-90 opacity-0 transition-all duration-300">
+            <p class="text-gray-700 font-bold mb-4 text-lg">¿Cómo desea importar las rutas?</p>
+            <p class="text-gray-600 text-sm mb-6">
+                <span class="font-semibold text-blue-600">Fusionar:</span> Añade nuevas rutas y actualiza las existentes con el mismo nombre y categoría.<br>
+                <span class="font-semibold text-red-600">Sobreescribir:</span> Elimina todas sus rutas actuales y carga solo las del archivo.
+            </p>
+            <div class="flex flex-col gap-3">
+                <button id="confirmMergeImportBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                    <i class="fas fa-code-merge mr-2"></i>Fusionar
+                </button>
+                <button id="confirmOverwriteImportBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Sobreescribir
+                </button>
+                <button id="cancelImportBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                    <i class="fas fa-times-circle mr-2"></i>Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+	
+	      // --- abre Instrucciones de carga de archivo ---
+	         const mostrarInstruccionesLink = document.getElementById("mostrarInstrucciones");
+const instruccionesDiv = document.getElementById("instrucciones");
+
+mostrarInstruccionesLink.addEventListener("click", function(event) {
+  event.preventDefault(); // Evita que el enlace redirija
+
+  if (instruccionesDiv.style.display === "none") {
+    instruccionesDiv.style.display = "block"; // Muestra el bloque de instrucciones
+    mostrarInstruccionesLink.textContent = "Ocultar instrucciones"; // Cambia el texto del enlace
+  } else {
+    instruccionesDiv.style.display = "none"; // Oculta el bloque de instrucciones
+    mostrarInstruccionesLink.textContent = "Mostrar instrucciones"; // Cambia el texto del enlace
+  }
+});
+	       // --- cierra Instrucciones de carga de archivo ---
+		   
+        let selectedRouteWaypoints = []; // Stores waypoints of the selected route for Google Maps
+        let fileToImport = null; // Variable to temporarily store the file to import
+
+        // --- DOM Elements References ---
+        const routeSearchInput = document.getElementById('routeSearch');
+        const routeCategoryInput = document.getElementById('routeCategory');
+        const savedRoutesContainer = document.getElementById('savedRoutesContainer');
+        const noRoutesMessage = document.getElementById('noRoutesMessage');
+
+        const categoryDropdownToggle = document.getElementById('categoryDropdownToggle');
+        const categoryDropdown = document.getElementById('categoryDropdown');
+        const categoryList = document.getElementById('categoryList');
+        const noCategoriesMessageDropdown = document.getElementById('noCategoriesMessageDropdown');
+
+        const clearDataText = document.getElementById('clearDataText');
+        const clearDataConfirmation = document.getElementById('clearDataConfirmation');
+        const confirmClearDataBtn = document.getElementById('confirmClearDataBtn');
+        const cancelClearDataBtn = document.getElementById('cancelClearDataBtn'); 
+
+        const exportRoutesWhatsAppBtn = document.getElementById('exportRoutesWhatsAppBtn');
+        const importRoutesInput = document.getElementById('importRoutesInput');
+        const triggerImportBtn = document.getElementById('triggerImportBtn');
+
+        const importConfirmationOverlay = document.getElementById('importConfirmationOverlay');
+        const importConfirmationContent = document.getElementById('importConfirmationContent');
+        const confirmMergeImportBtn = document.getElementById('confirmMergeImportBtn');
+        const confirmOverwriteImportBtn = document.getElementById('confirmOverwriteImportBtn');
+        const cancelImportBtnModal = document.getElementById('cancelImportBtn'); // Renombrado para evitar conflicto
+
+        const toastContainer = document.getElementById('toastContainer');
+        const sidebarShareAppBtn = document.getElementById('sidebarShareAppBtn');
+
+        // --- Utility Functions ---
+
+        /**
+         * Displays a custom toast notification.
+         * @param {string} message - The message to display.
+         * @param {string} type - 'success', 'error', 'info', 'warning'.
+         */
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast p-3 rounded-md shadow-lg text-white text-sm animate-fade-in-down ${
+                type === 'success' ? 'bg-green-500' :
+                type === 'error' ? 'bg-red-500' :
+                type === 'warning' ? 'bg-orange-500' :
+                'bg-blue-500'
+            }`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('animate-fade-out-up');
+                toast.addEventListener('animationend', () => toast.remove());
+            }, 3000);
+        }
+
+        /**
+         * Shows an element by adding visibility and transition classes.
+         * @param {HTMLElement} element
+         */
+        function showElement(element) {
+            element.style.display = 'block';
+            setTimeout(() => {
+                element.classList.add('active');
+                element.classList.remove('hidden', 'opacity-0', 'invisible', 'transform', 'translateY(10px)', 'scale-90');
+            }, 10);
+        }
+
+        /**
+         * Hides an element by adding visibility and transition classes.
+         * @param {HTMLElement} element
+         */
+        function hideElement(element) {
+            element.classList.remove('active');
+            element.classList.add('opacity-0', 'invisible');
+            element.addEventListener('transitionend', function handler() {
+                element.style.display = 'none';
+                element.removeEventListener('transitionend', handler);
+            }, { once: true });
+        }
+
+        // --- Route Management Functions (Adapted for gallery-only) ---
+
+        /**
+         * Renders saved routes in the container.
+         * Allows filtering routes by a search term.
+         * @param {string} searchTerm - Term to filter routes. Empty to show all.
+         */
+        function renderSavedRoutes(searchTerm = '') {
+            savedRoutesContainer.innerHTML = ''; // Clear container before rendering
+            const routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+
+            const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+            const filteredRoutes = routes.filter(route => {
+                const routeName = route.name ? route.name.toLowerCase() : '';
+                const routeCategory = route.category ? route.category.toLowerCase() : '';
+                return routeName.includes(lowerCaseSearchTerm) || routeCategory.includes(lowerCaseSearchTerm);
+            });
+
+            if (filteredRoutes.length === 0) {
+                noRoutesMessage.style.display = 'block';
+                savedRoutesContainer.appendChild(noRoutesMessage);
+                return;
+            } else {
+                noRoutesMessage.style.display = 'none';
+            }
+
+            const routesByCategory = filteredRoutes.reduce((acc, route) => {
+                const category = route.category || 'Sin Categoría';
+                if (!acc[category]) {
+                    acc[category] = [];
+                }
+                acc[category].push(route);
+                return acc;
+            }, {});
+
+            const sortedCategories = Object.keys(routesByCategory).sort();
+
+            sortedCategories.forEach(category => {
+                const categoryHeader = document.createElement('div');
+                categoryHeader.classList.add('category-header');
+                categoryHeader.classList.add('active'); // Ensure header is "active" visually (rotated arrow)
+                categoryHeader.innerHTML = `
+                    <span>${category} (${routesByCategory[category].length})</span>
+                    <i class="fas fa-chevron-right toggle-icon"></i>
+                `;
+                savedRoutesContainer.appendChild(categoryHeader);
+
+                const categoryRoutesList = document.createElement('ul');
+                categoryRoutesList.classList.add('category-routes-list');
+                categoryRoutesList.classList.add('active'); // Ensure route list is active
+                categoryRoutesList.style.display = 'block'; // Explicitly ensure list is displayed
+                savedRoutesContainer.appendChild(categoryRoutesList);
+
+                categoryHeader.addEventListener('click', () => {
+                    categoryRoutesList.classList.toggle('active');
+                    categoryHeader.classList.toggle('active');
+                    if (categoryRoutesList.classList.contains('active')) {
+                        categoryRoutesList.style.display = 'block';
+                    } else {
+                        categoryRoutesList.style.display = 'none';
+                    }
+                });
+
+                routesByCategory[category].forEach(route => {
+                    const li = document.createElement('li');
+                    // Contenedor para el nombre de la ruta
+                    const routeNameSpan = document.createElement('span');
+                    routeNameSpan.classList.add('route-name');
+                    routeNameSpan.textContent = route.name;
+                    li.appendChild(routeNameSpan);
+
+                    li.dataset.routeName = route.name;
+                    li.dataset.routeCategory = route.category;
+                    li.dataset.waypoints = JSON.stringify(route.waypoints); // Almacenar waypoints en el dataset
+
+                    li.addEventListener('click', () => {
+                        // Deseleccionar cualquier ruta previamente seleccionada
+                        document.querySelectorAll('.category-routes-list li').forEach(item => {
+                            item.classList.remove('selected');
+                            // Eliminar cualquier botón de Google Maps existente
+                            const existingButtonContainer = item.querySelector('.route-actions-inline');
+                            if (existingButtonContainer) {
+                                existingButtonContainer.remove();
+                            }
+                        });
+
+                        li.classList.add('selected'); // Mark as selected
+                        selectedRouteWaypoints = JSON.parse(li.dataset.waypoints); // Cargar waypoints para la ruta seleccionada
+                        
+                        // Crear y añadir el botón de Google Maps
+                        const inlineActionsContainer = document.createElement('div');
+                        inlineActionsContainer.classList.add('route-actions-inline');
+
+                        const googleMapsButton = document.createElement('button');
+                        googleMapsButton.innerHTML = '<i class="fab fa-google mr-2"></i>Abrir en Maps';
+                        googleMapsButton.onclick = (event) => {
+                            event.stopPropagation(); // Evita que el clic se propague al li
+                            openSelectedRouteInGoogleMaps();
+                        };
+                        inlineActionsContainer.appendChild(googleMapsButton);
+
+                        // Eliminado: El botón de eliminar ya no se añade aquí
+                        // const deleteButton = document.createElement('button');
+                        // deleteButton.classList.add('delete-btn-inline');
+                        // deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+                        // deleteButton.onclick = (event) => {
+                        //     event.stopPropagation(); // Prevents click from propagating to li
+                        //     deleteRoute(route.name, route.category);
+                        // };
+                        // inlineActionsContainer.appendChild(deleteButton);
+
+
+                        li.appendChild(inlineActionsContainer);
+
+                        showToast(`Ruta "${route.name}" seleccionada.`, 'info');
+                    });
+                    categoryRoutesList.appendChild(li);
+                });
+            });
+        }
+
+        /**
+         * Displays the selected route (no longer used for a separate display section).
+         * Now, the selected route's waypoints are loaded directly on li click.
+         * @param {object} route - The selected route object.
+         */
+        function displaySelectedRoute(route) {
+            // This function is now mostly redundant as waypoints are loaded directly on li click
+            // and the UI update happens inline in renderSavedRoutes.
+            // Keeping it for semantic clarity if needed elsewhere, but it doesn't update a separate display area.
+            selectedRouteWaypoints = route.waypoints; // Ensure waypoints are set if this is called directly
+            // No showElement(selectedRouteDisplay) needed here anymore
+        }
+
+
+        /**
+         * Deletes a route from localStorage.
+         * Note: This function is now called only if manually triggered (e.g., from console or if re-added later).
+         * @param {string} nameToDelete - Name of the route to delete.
+         * @param {string} categoryToDelete - Category of the route to delete.
+         */
+        function deleteRoute(nameToDelete, categoryToDelete) {
+            let routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+            routes = routes.filter(route => !(route.name === nameToDelete && route.category === categoryToDelete));
+            localStorage.setItem('savedRoutes', JSON.stringify(routes));
+            renderSavedRoutes(); // Re-render the list
+            populateCategoryDropdown(); // Update category dropdown
+            // No hideElement(selectedRouteDisplay) needed here anymore
+            showToast(`Ruta "${nameToDelete}" eliminada.`, 'success');
+        }
+
+        /**
+         * Generates the Google Maps URL for the waypoints.
+         * @returns {string|null} Google Maps URL or null if not enough waypoints.
+         */
+        function generateGoogleMapsUrl() {
+            if (selectedRouteWaypoints.length < 2) {
+                return null;
+            }
+
+            const origin = `${selectedRouteWaypoints[0].lat},${selectedRouteWaypoints[0].lng}`;
+            const destination = `${selectedRouteWaypoints[selectedRouteWaypoints.length - 1].lat},${selectedRouteWaypoints[selectedRouteWaypoints.length - 1].lng}`;
+            let waypointsParam = '';
+
+            if (selectedRouteWaypoints.length > 2) {
+                const intermediateWaypoints = selectedRouteWaypoints.slice(1, -1).map(wp => `${wp.lat},${wp.lng}`).join('/');
+                waypointsParam = `/${intermediateWaypoints}`;
+            }
+
+            return `https://www.google.com/maps/dir/${origin}${waypointsParam}/${destination}`;
+        }
+
+        /**
+         * Opens the selected route in Google Maps.
+         */
+        function openSelectedRouteInGoogleMaps() {
+            const googleMapsUrl = generateGoogleMapsUrl();
+            if (googleMapsUrl) {
+                window.open(googleMapsUrl, '_blank');
+                showToast('Abriendo ruta en Google Maps.', 'info');
+            } else {
+                showToast('No hay una ruta seleccionada o no tiene suficientes puntos para abrir en Google Maps.', 'warning');
+            }
+        }
+
+        // --- Storage and Transfer Functions ---
+
+        /**
+         * Clears all routes and categories from localStorage.
+         */
+        function clearAllData() {
+            localStorage.clear();
+            showToast('Caché y rutas guardadas borradas correctamente.', 'success');
+
+            routeSearchInput.value = '';
+            routeCategoryInput.value = '';
+
+            renderSavedRoutes();
+            populateCategoryDropdown();
+        }
+
+        /**
+         * Exports saved routes to a JSON file or shares them.
+         */
+        async function exportRoutesWhatsApp() {
+            const routes = localStorage.getItem('savedRoutes');
+            if (!routes || routes === '[]') {
+                showToast('No hay rutas guardadas para exportar.', 'warning');
+                return;
+            }
+
+            const fileName = `rutas_VisorRutas_${new Date().toISOString().slice(0,10)}.json`;
+            const blob = new Blob([routes], { type: 'application/json' });
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], fileName)] })) {
+                try {
+                    await navigator.share({
+                        files: [new File([blob], fileName)],
+                        title: 'Mis Rutas de Visor de Rutas',
+                        text: 'Aquí te comparto mis rutas guardadas de la aplicación Visor de Rutas.'
+                    });
+                    showToast('Rutas compartidas con éxito.', 'success');
+                } catch (error) {
+                    console.error('Error al compartir vía Web Share API:', error);
+                    if (error.name === 'AbortError') {
+                        showToast('Compartición cancelada.', 'info');
+                    } else {
+                        showToast('No se pudo compartir directamente. Descargando el archivo...', 'error');
+                        downloadJsonFile(blob, fileName);
+                    }
+                }
+            } else {
+                showToast('Tu navegador no soporta compartir archivos directamente. Se descargará el archivo JSON.', 'info');
+                downloadJsonFile(blob, fileName);
+            }
+        }
+
+        /**
+         * Downloads a Blob as a JSON file.
+         * @param {Blob} blob - The Blob to download.
+         * @param {string} fileName - The file name.
+         */
+        function downloadJsonFile(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", url);
+            downloadAnchorNode.setAttribute("download", fileName);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        /**
+         * Handles the selection of a JSON file for importing routes.
+         * @param {Event} event - The change event of the file input.
+         */
+        function importRoutesFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                showToast('No se seleccionó ningún archivo.', 'warning');
+                return;
+            }
+            fileToImport = file;
+            showElement(importConfirmationOverlay);
+            event.target.value = '';
+        }
+
+        /**
+         * Processes the imported file, merging or overwriting existing routes.
+         * @param {boolean} merge - True to merge, false to overwrite.
+         */
+        function processImportedFile(merge) {
+            if (!fileToImport) {
+                showToast('No hay archivo para importar.', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedRoutes = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedRoutes) || !importedRoutes.every(r => r.name && r.waypoints && Array.isArray(r.waypoints))) {
+                        showToast('El archivo no parece ser un formato de rutas válido. Asegúrate de que sea un archivo JSON de rutas.', 'error');
+                        hideElement(importConfirmationOverlay);
+                        return;
+                    }
+
+                    const existingRoutes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+                    let finalRoutes = [];
+
+                    if (merge) {
+                        finalRoutes = [...existingRoutes];
+                        importedRoutes.forEach(newRoute => {
+                            if (newRoute.name && newRoute.waypoints && Array.isArray(newRoute.waypoints)) {
+                                const existingIndex = finalRoutes.findIndex(r => r.name === newRoute.name && r.category === newRoute.category);
+                                if (existingIndex !== -1) {
+                                    finalRoutes[existingIndex] = newRoute;
+                                } else {
+                                    finalRoutes.push(newRoute);
+                                }
+                            } else {
+                                console.warn('Ruta inválida encontrada en el archivo importado, omitiendo:', newRoute);
+                            }
+                        });
+                        showToast('Rutas importadas y fusionadas.', 'success');
+                    } else {
+                        finalRoutes = importedRoutes;
+                        showToast('Rutas importadas y sobrescritas completamente.', 'success');
+                    }
+
+                    localStorage.setItem('savedRoutes', JSON.stringify(finalRoutes));
+                    
+                    // Ensure the interface refreshes after import
+                    routeSearchInput.value = ''; // Clear search field
+                    routeCategoryInput.value = ''; // Clear category field
+                    renderSavedRoutes();
+                    populateCategoryDropdown();
+                } catch (error) {
+                    showToast('Error al leer o parsear el archivo JSON. Asegúrate de que sea un archivo JSON válido.', 'error');
+                    console.error('Error al importar rutas:', error);
+                } finally {
+                    hideElement(importConfirmationOverlay);
+                    fileToImport = null;
+                }
+            };
+            reader.readAsText(fileToImport);
+        }
+
+        /**
+         * Populates the category dropdown with existing categories from saved routes.
+         */
+        function populateCategoryDropdown() {
+            categoryList.innerHTML = '';
+            const routes = JSON.parse(localStorage.getItem('savedRoutes') || '[]');
+            const categories = new Set(routes.map(route => route.category || 'Sin Categoría'));
+
+            if (categories.size === 0) {
+                noCategoriesMessageDropdown.style.display = 'block';
+            } else {
+                noCategoriesMessageDropdown.style.display = 'none';
+                Array.from(categories).sort((a, b) => a.localeCompare(b)).forEach(cat => {
+                    const li = document.createElement('li');
+                    li.textContent = cat;
+                    li.classList.add('p-2', 'cursor-pointer', 'hover:bg-blue-100', 'text-gray-700');
+                    li.addEventListener('click', () => {
+                        routeCategoryInput.value = cat;
+                        routeSearchInput.value = cat; // Update search field with selected category
+                        hideElement(categoryDropdown);
+                        renderSavedRoutes(cat); // Filter route view by selected category
+                    });
+                    categoryList.appendChild(li);
+                });
+            }
+        }
+
+        /**
+         * Shares the application URL.
+         */
+        async function shareApp() {
+            const appUrl = window.location.href;
+            const appTitle = "Galería de Rutas Personalizadas";
+            const appText = "¡Descubre la Galería de Rutas! Una herramienta fácil para visualizar tus rutas almacenadas.";
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: appTitle,
+                        text: appText,
+                        url: appUrl,
+                    });
+                    showToast('App compartida con éxito.', 'success');
+                } catch (error) {
+                    console.error('Error al compartir la app:', error);
+                    if (error.name === 'AbortError') {
+                        showToast('Compartición de la aplicación cancelada.', 'info');
+                    } else {
+                        copyAppUrlToClipboard(appUrl);
+                    }
+                }
+            } else {
+                copyAppUrlToClipboard(appUrl);
+            }
+        }
+
+        /**
+         * Copies a URL to the clipboard and shows a toast.
+         * @param {string} url - The URL to copy.
+         */
+        function copyAppUrlToClipboard(url) {
+            document.execCommand('copy');
+            showToast('El enlace de la aplicación ha sido copiado al portapapeles. ¡Compártelo!', 'info');
+        }
+
+        // --- Event Listeners ---
+
+        // Event listeners para Borrar Caché y Rutas
+        clearDataText.addEventListener('click', () => {
+            hideElement(clearDataText);
+            showElement(clearDataConfirmation);
+            hideElement(categoryDropdown);
+        });
+
+        confirmClearDataBtn.addEventListener('click', () => {
+            clearAllData();
+            hideElement(clearDataConfirmation);
+            showElement(clearDataText);
+        });
+
+        cancelClearDataBtn.addEventListener('click', () => {
+            hideElement(clearDataConfirmation);
+            showElement(clearDataText);
+        });
+
+        // Event listeners para Exportar/Importar Rutas
+        exportRoutesWhatsAppBtn.addEventListener('click', exportRoutesWhatsApp);
+        triggerImportBtn.addEventListener('click', () => {
+            importRoutesInput.click();
+        });
+        importRoutesInput.addEventListener('change', importRoutesFromFile);
+
+        // Event listeners para el modal de importación
+        confirmMergeImportBtn.addEventListener('click', () => processImportedFile(true));
+        confirmOverwriteImportBtn.addEventListener('click', () => processImportedFile(false));
+        cancelImportBtnModal.addEventListener('click', () => {
+            hideElement(importConfirmationOverlay);
+            fileToImport = null;
+            showToast('Importación de rutas cancelada.', 'info');
+        });
+
+        // Event listeners para el dropdown de categorías
+        categoryDropdownToggle.addEventListener('click', (event) => {
+            event.stopPropagation();
+            populateCategoryDropdown();
+            if (categoryDropdown.classList.contains('active')) {
+                hideElement(categoryDropdown);
+            } else {
+                showElement(categoryDropdown);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!categoryDropdown.contains(event.target) && event.target !== categoryDropdownToggle && event.target !== routeCategoryInput) {
+                hideElement(categoryDropdown);
+            }
+        });
+        routeCategoryInput.addEventListener('focus', () => {
+            hideElement(categoryDropdown);
+        });
+
+        // Event listener para el buscador de rutas (filtra la galería)
+        routeSearchInput.addEventListener('input', (event) => {
+            renderSavedRoutes(event.target.value);
+            hideElement(categoryDropdown);
+        });
+
+        // Event listener para el botón de compartir la App
+        sidebarShareAppBtn.addEventListener('click', shareApp);
+
+        // Inicializa la aplicación al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSavedRoutes(); // Carga y muestra las rutas guardadas
+            populateCategoryDropdown(); // Popula el dropdown de categorías
+        });
+    </script>
+</body>
+</html>

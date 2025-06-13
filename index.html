@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELD Simulador HOS</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'], // Usar Inter como fuente principal
+            },
+            colors: {
+              'red-500-custom': '#ef4444',
+              'orange-500-custom': '#f97316',
+              'blue-500-custom': '#3b82f6',
+              'green-500-custom': '#22c55e',
+              'red-100-custom': '#fee2e2',
+              'border-red-400-custom': '#f87171',
+              'text-red-700-custom': '#b91c1c',
+              'blue-100-custom': '#dbeafe',
+              'border-blue-400-custom': '#60a5fa',
+              'text-blue-700-custom': '#1d4ed8',
+              'orange-100-custom': '#ffedd5',
+              'border-orange-400-custom': '#fbbf24',
+              'text-orange-700-custom': '#c2410c',
+              'green-100-custom': '#dcfce7',
+              'border-green-400-custom': '#4ade80',
+              'text-green-700-custom': '#15803d',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+        /* Estilos para los toasts/mensajes */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            padding: 10px 20px;
+            border-radius: 5px;
+            color: white;
+            margin-bottom: 10px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .toast.info { background-color: #3b82f6; } /* blue */
+        .toast.warning { background-color: #f97316; } /* orange */
+        .toast.error { background-color: #ef4444; } /* red */
+        .toast.success { background-color: #22c55e; } /* green */
+
+        /* Estilos para el modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        /* Calendar specific styles */
+        #calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px; /* Reduced gap */
+            text-align: center;
+            font-size: 0.875rem; /* text-sm */
+        }
+        #calendar > div {
+            padding: 8px 4px; /* py-2 px-1 */
+            border-radius: 0.375rem; /* rounded-md */
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        #calendar > div.font-semibold { /* Day names */
+            background-color: transparent;
+            cursor: default;
+            font-weight: 600;
+        }
+        #calendar > div.py-2:not(.font-semibold):hover { /* Regular day hover */
+            background-color: #e5e7eb; /* gray-200 */
+        }
+        #calendar > div.bg-blue-200 { /* Days with logs */
+            background-color: #bfdbfe; /* blue-200 */
+            font-weight: 700; /* font-bold */
+            color: #1e40af; /* blue-800 */
+        }
+        #calendar > div.ring-2 { /* Selected day */
+            box-shadow: 0 0 0 2px #3b82f6; /* ring-blue-500 */
+        }
+        /* Style for days with violations */
+        #calendar > div.has-violations {
+            background-color: #fecaca; /* red-200 */
+            color: #b91c1c; /* red-700 */
+            font-weight: 700;
+            border: 1px solid #dc2626; /* red-600 */
+        }
+        #calendar > div.ring-2.has-violations { /* Selected day with violations */
+            box-shadow: 0 0 0 2px #dc2626; /* ring-red-600 */
+        }
+
+
+        /* History Modal specific content sizing */
+        #historyModal .custom-modal-content {
+            max-width: 900px; /* Wider modal for calendar and logs side-by-side */
+            width: 95%;
+            height: 90%; /* Take more height */
+            display: flex;
+            flex-direction: column;
+            text-align: left; /* Adjust text alignment for content */
+        }
+        #historyModal .custom-modal-body {
+            display: flex;
+            flex-direction: column; /* Default for small screens */
+            flex-grow: 1;
+            overflow-y: auto; /* Allow scrolling for modal content */
+            padding: 0; /* Remove padding from custom-modal-body to manage within sections */
+        }
+
+        /* Responsive layout for history modal body */
+        @media (min-width: 768px) { /* md breakpoint */
+            #historyModal .custom-modal-body {
+                flex-direction: row; /* Side-by-side on larger screens */
+            }
+            #historyModal .calendar-container,
+            #historyModal .log-details-container {
+                flex: 1; /* Each takes equal width */
+                padding: 1rem; /* Add padding to content within these containers */
+            }
+            #historyModal .calendar-container {
+                border-right: 1px solid #e2e8f0; /* Divider */
+            }
+            #selectedDayLogContent {
+                max-height: 200px; /* Limit height of log entries */
+            }
+        }
+        
+        #historyModal .calendar-container {
+            flex-shrink: 0; /* Prevent calendar from shrinking */
+            min-width: 300px; /* Minimum width for calendar */
+            max-width: 450px;
+            padding: 1rem;
+        }
+        #historyModal .log-details-container {
+            flex-grow: 1; /* Log details takes remaining space */
+            padding: 1rem;
+        }
+
+        /* Map specific styles */
+        #map-container {
+            height: 300px; /* Adjust height as needed */
+            width: 100%;
+            margin-top: 1rem;
+            border-radius: 0.375rem;
+        }
+    </style>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <div class="container mx-auto p-4 max-w-lg bg-white shadow-lg rounded-lg mt-10">
+        <h1 class="text-3xl font-bold text-center mb-6">ELD Simulador HOS</h1>
+
+        <div id="toast-container"></div>
+
+        <div class="flex justify-end items-center mb-4">
+            <span class="mr-2 text-sm font-medium text-gray-900" data-lang-key="es_lang">ES</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" value="" id="languageSwitch" class="sr-only peer">
+                <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </label>
+            <span class="ml-2 text-sm font-medium text-gray-900" data-lang-key="en_lang">EN</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button id="driving-btn" class="status-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">DRIVING</button>
+            <button id="on-duty-btn" class="status-btn bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">ON DUTY (Non-Driving)</button>
+            <button id="off-duty-btn" class="status-btn bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">OFF DUTY</button>
+            <button id="sleeper-berth-btn" class="status-btn bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">SLEEPER BERTH</button>
+        </div>
+
+        <div class="text-center mb-6">
+            <p class="text-xl font-semibold mb-2"><span id="current-status-label" class="font-semibold" data-lang-key="current_status">Estado Actual:</span> <span id="current-status-display" class="font-bold">OFF DUTY</span></p>
+            <p class="text-xl font-semibold mb-2"><span id="location-label" class="font-semibold" data-lang-key="location">Ubicación:</span> <span id="location-display" class="font-bold text-sm">Cargando...</span></p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="thirty_min_break">Descanso de 30 minutos Restante:</p>
+                    <p id="thirty-minute-break-timer" class="text-3xl font-mono text-purple-700">00:00:00</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="driving_time">Tiempo de Conducción Restante (11h):</p>
+                    <p id="driving-timer" class="text-3xl font-mono text-blue-700">00:00:00</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="on_duty_time">Tiempo en Servicio Restante (14h):</p>
+                    <p id="on-duty-timer" class="text-3xl font-mono text-yellow-700">00:00:00</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="hos_remaining">HOS Restantes (Ciclo 70h/8d):</p>
+                    <p id="hos-remaining" class="text-3xl font-mono text-green-700">00:00:00</p>
+                 </div>
+                 <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="ten_hour_break_shift">Descanso entre turnos (10 Horas):</p>
+                    <p id="ten-hour-break-timer" class="text-3xl font-mono text-red-700">00:00:00</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
+                    <p class="font-medium" data-lang-key="thirty_four_hour_restart">Descanso de Reinicio (34 Horas):</p>
+                    <p id="thirty-four-hour-restart-timer" class="text-3xl font-mono text-orange-700">00:00:00</p>
+                </div>
+            </div>
+             <button id="restart-70h-cycle-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg w-full mt-4" data-lang-key="restart_70h_cycle">Reiniciar Ciclo de 70 Horas</button>
+        </div>
+
+
+        <div class="mt-6">
+            <h2 class="text-2xl font-bold text-center mb-4" data-lang-key="daily_summary">Resumen del Día</h2>
+            <div id="daily-summary" class="bg-gray-50 p-4 rounded-lg shadow-sm">
+                </div>
+             <button id="view-history-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full mt-4" data-lang-key="view_history">Ver Historial / Bitácora</button>
+        </div>
+    </div>
+
+    <div id="welcome-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-4" data-lang-key="welcome_modal_title">Bienvenido al Simulador ELD HOS</h2>
+            <p class="mb-4" data-lang-key="welcome_modal_message">Es el inicio de un nuevo día de servicio o necesitas reiniciar tus horas. Por favor, selecciona una opción:</p>
+            <button id="start-new-day-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg mr-2" data-lang-key="start_new_day">Iniciar Nuevo Día (OFF DUTY)</button>
+            <button id="continue-current-day-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg" data-lang-key="continue_current_day">Continuar Día Actual</button>
+        </div>
+    </div>
+
+    <div id="ready-to-drive-modal" class="modal hidden">
+        <div class="modal-content max-w-sm">
+            <h2 class="text-xl font-bold mb-4" data-lang-key="ready_to_drive_title">¿Listo para Conducir o Trabajar?</h2>
+            <p class="mb-4" data-lang-key="ready_to_drive_message">Para iniciar un nuevo turno de conducción o en servicio, se requiere un descanso consecutivo de 10 horas fuera de servicio o en litera.</p>
+            <p class="mb-6 font-semibold" data-lang-key="ready_to_drive_question">¿Has completado tu descanso de 10 horas?</p>
+            <button id="ready-to-drive-yes-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg mr-2" data-lang-key="ready_to_drive_yes">Sí, estoy listo (ON DUTY)</button>
+            <button id="ready-to-drive-no-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg" data-lang-key="ready_to_drive_no">No, necesito descansar más (SLEEPER BERTH)</button>
+        </div>
+    </div>
+
+    <div id="personal-movement-modal" class="modal hidden">
+        <div class="modal-content max-w-md">
+            <h2 class="text-xl font-bold mb-4" data-lang-key="personal_movement_title">Movimiento Detectado</h2>
+            <p class="mb-4" data-lang-key="personal_movement_message">Se ha detectado movimiento del vehículo mientras estabas fuera de servicio.</p>
+            <p class="mb-6 font-semibold" data-lang-key="personal_movement_question">¿Estás comenzando un turno de trabajo o son movimientos personales?</p>
+            <button id="start-work-driving-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg mr-2" data-lang-key="start_work_driving">Iniciar Turno (DRIVING)</button>
+            <button id="personal-movement-pause-btn" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg" data-lang-key="personal_movement_pause">Movimiento Personal (Pausar ELD)</button>
+        </div>
+    </div>
+
+    <div id="historyModal" class="modal hidden">
+        <div class="custom-modal-content">
+            <div class="flex justify-between items-center p-4 border-b border-gray-200">
+                <h2 class="text-2xl font-bold" data-lang-key="history_log_title">Historial y Bitácora</h2>
+                <button id="close-history-modal-btn" class="text-gray-600 hover:text-gray-900 text-4xl font-extrabold leading-none">&times;</button>
+            </div>
+            <div class="custom-modal-body">
+                <div class="calendar-container">
+                    <div class="flex justify-between items-center mb-4">
+                        <button id="prev-month-btn" class="px-3 py-1 bg-gray-200 rounded-md hover:bg-gray-300">&lt;</button>
+                        <h3 id="current-month-year" class="text-lg font-semibold"></h3>
+                        <button id="next-month-btn" class="px-3 py-1 bg-gray-200 rounded-md hover:bg-gray-300">&gt;</button>
+                    </div>
+                    <div id="calendar">
+                        </div>
+                    <p class="text-sm text-gray-600 mt-4" data-lang-key="calendar_note">Días resaltados tienen registros de actividad.</p>
+                    <p class="text-sm text-red-600 font-semibold mt-1" data-lang-key="calendar_violation_note">Días con violaciones aparecen en rojo.</p>
+
+                </div>
+
+                <div class="log-details-container flex flex-col">
+                    <h3 id="selected-day-title" class="text-xl font-bold mb-3" data-lang-key="selected_day_log">Bitácora para el Día Seleccionado:</h3>
+                    <div id="selectedDayLogContent" class="bg-gray-50 p-3 rounded-lg shadow-sm overflow-y-auto flex-grow mb-4">
+                        <p class="text-center text-gray-500" data-lang-key="no_log_selected">Selecciona un día para ver su bitácora.</p>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3" data-lang-key="route_map_title">Ruta del Día:</h3>
+                    <div id="map-container" class="bg-gray-200 rounded-lg">
+                        </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 flex justify-end">
+                <button id="close-history-modal-btn-bottom" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg" data-lang-key="close_modal_button">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- CONSTANTES GLOBALES (TODO en segundos) ---
+        const MAX_DRIVING_TIME = 11 * 3600; // 11 horas * 60 minutos * 60 segundos
+        const MAX_ON_DUTY_TIME = 14 * 3600; // 14 horas * 60 minutos * 60 segundos
+        const MAX_HOS_CYCLE = 70 * 3600;    // 70 horas * 60 minutos * 60 segundos
+        const MIN_30_MIN_BREAK = 30 * 60;   // 30 minutos * 60 segundos
+        const MIN_10_HOUR_BREAK = 10 * 3600; // 10 horas * 60 minutos * 60 segundos
+        const MIN_34_HOUR_RESTART = 34 * 3600; // 34 horas * 60 minutos * 60 segundos
+
+        // --- Constantes para avisos y límites (en segundos) ---
+        const WARNING_THRESHOLD_DRIVING = 40 * 60; // 40 minutos antes del límite de conducción
+        const WARNING_THRESHOLD_ON_DUTY = 40 * 60; // 40 minutos antes del límite de servicio
+        // const TACO_BREAK_THRESHOLD = 4 * 3600; // 4 horas de conducción continua para aviso de tacos (No implementado aún)
+
+
+        // --- VARIABLES DE ESTADO GLOBALES ---
+        let currentStatus = 'OFF_DUTY'; // Estado actual del conductor
+        let statusStartTime = Date.now(); // Marca de tiempo (milisegundos) del inicio del estado actual
+        let drivingTime = 0; // Tiempo TOTAL de conducción acumulado en el ciclo actual (en segundos)
+        let onDutyTime = 0; // Tiempo TOTAL en servicio (incluye conducción) acumulado en el ciclo actual (en segundos)
+        let intervalId; // ID del intervalo para limpiar el temporizador
+
+        // Variables para gestionar los descansos y violaciones (en milisegundos para marcas de tiempo)
+        let last30MinBreakStart = 0;
+        let last30MinBreakEnd = 0;
+        let last10hrOffDutyCompletion = 0; // Marca de tiempo de cuándo terminó el último descanso de 10 horas
+        let thirtyFourHourBreakTime = 0; // NEW: Contador para el descanso de 34 horas (en segundos)
+        let last34hrBreakStart = 0; // NEW: Timestamp of when 34hr break started (or last off/sleeper berth began)
+
+
+        // Variable para el tiempo continuo de conducción (se reinicia al cambiar de estado fuera de DRIVING)
+        let drivingStartTime = 0; // Marca de tiempo del inicio del período de conducción actual
+        let continuousDrivingTime = 0; // **GLOBAL**: Tiempo continuo de conducción (en segundos)
+
+        // Variables para el registro diario (AHORA ALMACENA OBJETOS CON COORDENADAS Y VIOLACIONES)
+        let dailyLog = {}; // Guarda las entradas del log por fecha
+        let currentLogDate = new Date().toISOString().slice(0, 10); // Fecha actual en formato ISO AAAA-MM-DD
+
+        // Variables para la geolocalización
+        let userLocation = "Cargando...";
+        let lastKnownLat = null;
+        let lastKnownLon = null;
+        let watchPositionId = null; // ID del observador de posición para detenerlo si es necesario
+        const MOVEMENT_THRESHOLD_METERS = 50; // Umbral para detectar movimiento (en metros)
+        let lastPositionForMovementCheck = null; // Última posición registrada para el chequeo de movimiento
+        let isGeolocationPaused = false; // NEW: Bandera para pausar el impacto de la geolocalización en HOS
+
+        // Variables para el idioma
+        let currentLanguage = 'es'; // Idioma por defecto
+        const LANGUAGES = {
+            es: {
+                // Mensajes de estado
+                driving_status_message: "Estado cambiado a CONDUCIENDO.",
+                on_duty_status_message: "Estado cambiado a EN SERVICIO (No Conduciendo).",
+                off_duty_status_message: "Estado cambiado a FUERA DE SERVICIO.",
+                sleeper_berth_status_message: "Estado cambiado a LITERA.",
+                start_new_day_message: "¡Nuevo día iniciado! Horas reiniciadas y en OFF DUTY.",
+                cycle_70h_reset_success: "¡Ciclo de 70h/8d reiniciado correctamente!",
+                cycle_70h_reset_needed: "Necesitas completar un descanso de 34 horas para reiniciar el ciclo de 70h/8d.",
+
+
+                // Nombres de los estados
+                driving: "Conduciendo",
+                on_duty: "En Servicio",
+                off_duty: "Fuera de Servicio",
+                sleeper_berth: "Litera",
+
+                // Textos de los temporizadores
+                current_status: "Estado Actual",
+                location: "Ubicación",
+                thirty_min_break: "Descanso de 30 minutos Restante",
+                driving_time: "Tiempo de Conducción Restante (11h)",
+                on_duty_time: "Tiempo en Servicio Restante (14h)",
+                hos_remaining: "HOS Restantes (Ciclo 70h/8d)",
+                ten_hour_break_shift: "Descanso entre turnos (10 Horas)",
+                thirty_four_hour_restart: "Descanso de Reinicio (34 Horas)", // NEW: Text for 34hr restart timer
+                restart_70h_cycle: "Reiniciar Ciclo de 70 Horas", // NEW: Text for 34hr restart button
+
+                // Resumen Diario
+                daily_summary: "Resumen del Día",
+                total_driving: "Total Conduciendo",
+                total_on_duty: "Total En Servicio",
+                total_off_duty: "Total Fuera de Servicio",
+                total_sleeper_berth: "Total Litera",
+                view_history: "Ver Historial / Bitácora",
+                log_entry_time: "Hora",
+                log_entry_status: "Estado",
+                log_entry_location: "Ubicación",
+                log_entry_violations: "Violaciones",
+
+                // Mensajes del modal de bienvenida/reinicio
+                welcome_modal_title: "Bienvenido al Simulador ELD HOS",
+                welcome_modal_message: "Es el inicio de un nuevo día de servicio o necesitas reiniciar tus horas. Por favor, selecciona una opción:",
+                start_new_day: "Iniciar Nuevo Día (OFF DUTY)",
+                continue_current_day: "Continuar Día Actual",
+
+
+                // Mensajes de violación (adaptados a cuentas regresivas)
+                violation_driving_11h: "¡VIOLACIÓN! Has excedido las 11 horas de conducción.",
+                violation_driving_11h_upcoming: "ADVERTENCIA: Te quedan 40 minutos de conducción (límite de 11h).",
+                violation_on_duty_14h: "¡VIOLACIÓN! Has excedido las 14 horas de servicio.",
+                violation_on_duty_14h_upcoming: "ADVERTENCIA: Te quedan 40 minutos en servicio (límite de 14h).",
+                violation_30min_break: "¡VIOLACIÓN! Necesitas un descanso de 30 minutos después de 8h de servicio.",
+                violation_30min_break_upcoming: "ADVERTENCIA: Te acercas a las 8h de servicio, necesitarás un descanso de 30 minutos pronto.",
+                violation_10hr_break_needed: "¡VIOLACIÓN! Necesitas 10 horas de descanso consecutivo antes de conducir/estar en servicio.",
+                violation_hos_cycle: "¡VIOLACIÓN! Has excedido las 70 horas en el ciclo de 8 días.",
+                violation_hos_remaining_upcoming: "ADVERTENCIA: Te quedan 5 horas en tu ciclo de 8 días.",
+                violation_no_break_driving: "¡VIOLACIÓN! Conduciendo más de 8h sin descanso de 30 min.",
+                geolocation_not_supported: "Geolocalización no soportada en este navegador.",
+                location_unavailable: "Ubicación no disponible.",
+
+                // Idioma de los labels de lenguaje
+                es_lang: "ES",
+                en_lang: "EN",
+
+                // Calendario y Historial
+                history_log_title: "Historial y Bitácora",
+                calendar_note: "Días resaltados tienen registros de actividad.",
+                calendar_violation_note: "Días con violaciones aparecen en rojo.",
+                selected_day_log: "Bitácora para el Día Seleccionado",
+                no_log_selected: "Selecciona un día para ver su bitácora.",
+                sunday_short: "Dom",
+                monday_short: "Lun",
+                tuesday_short: "Mar",
+                wednesday_short: "Mié",
+                thursday_short: "Jue",
+                friday_short: "Vie",
+                saturday_short: "Sáb",
+                january: "Enero",
+                february: "Febrero",
+                march: "Marzo",
+                april: "Abril",
+                may: "Mayo",
+                june: "Junio",
+                july: "Julio",
+                august: "Agosto",
+                september: "Septiembre",
+                october: "Octubre",
+                november: "Noviembre",
+                december: "Diciembre",
+                route_map_title: "Ruta del Día:",
+                close_modal_button: "Cerrar",
+
+                // Ready to Drive Modal
+                ready_to_drive_title: "¿Listo para Conducir o Trabajar?",
+                ready_to_drive_message: "Para iniciar un nuevo turno de conducción o en servicio, se requiere un descanso consecutivo de 10 horas fuera de servicio o en litera.",
+                ready_to_drive_question: "¿Has completado tu descanso de 10 horas?",
+                ready_to_drive_yes: "Sí, estoy listo (ON DUTY)",
+                ready_to_drive_no: "No, necesito descansar más (SLEEPER BERTH)",
+                pretrip_reminder: "Recuerda realizar tu inspección Pre-Trip antes de comenzar a conducir.",
+
+                // NEW: Personal Movement Modal
+                personal_movement_title: "Movimiento Detectado",
+                personal_movement_message: "Se ha detectado movimiento del vehículo mientras estabas fuera de servicio.",
+                personal_movement_question: "¿Estás comenzando un turno de trabajo o son movimientos personales?",
+                start_work_driving: "Iniciar Turno (DRIVING)",
+                personal_movement_pause: "Movimiento Personal (Pausar ELD)",
+                eld_paused_notification: "Modo de Movimiento Personal activado. El ELD está pausado y no registrará horas de servicio.",
+                eld_resumed_notification: "Modo de Movimiento Personal desactivado. El ELD ha reanudado el seguimiento de horas de servicio."
+            },
+            en: {
+                // Status messages
+                driving_status_message: "Status changed to DRIVING.",
+                on_duty_status_message: "Status changed to ON DUTY (Non-Driving).",
+                off_duty_status_message: "Status changed to OFF DUTY.",
+                sleeper_berth_status_message: "Status changed to SLEEPER BERTH.",
+                start_new_day_message: "New day started! Hours reset and OFF DUTY.",
+                cycle_70h_reset_success: "70h/8d cycle successfully reset!",
+                cycle_70h_reset_needed: "You need to complete a 34-hour break to reset the 70h/8d cycle.",
+
+                // Status names
+                driving: "Driving",
+                on_duty: "On Duty",
+                off_duty: "Off Duty",
+                sleeper_berth: "Sleeper Berth",
+
+                // Timer texts
+                current_status: "Current Status",
+                location: "Location",
+                thirty_min_break: "30-Minute Break Remaining",
+                driving_time: "Driving Time Remaining (11h)",
+                on_duty_time: "On-Duty Time Remaining (14h)",
+                hos_remaining: "HOS Remaining (70h/8d Cycle)",
+                ten_hour_break_shift: "Inter-shift Break (10 Hours)",
+                thirty_four_hour_restart: "34-Hour Restart Break", // NEW: Text for 34hr restart timer
+                restart_70h_cycle: "Restart 70-Hour Cycle", // NEW: Text for 34hr restart button
+
+                // Daily Summary
+                daily_summary: "Daily Summary",
+                total_driving: "Total Driving",
+                total_on_duty: "Total On-Duty",
+                total_off_duty: "Total Off-Duty",
+                total_sleeper_berth: "Total Sleeper Berth",
+                view_history: "View History / Logbook",
+                log_entry_time: "Time",
+                log_entry_status: "Status",
+                log_entry_location: "Location",
+                log_entry_violations: "Violations",
+
+                // Welcome/Reset modal messages
+                welcome_modal_title: "Welcome to ELD HOS Simulator",
+                welcome_modal_message: "It's the start of a new service day or you need to reset your hours. Please select an option:",
+                start_new_day: "Start New Day (OFF DUTY)",
+                continue_current_day: "Continue Current Day",
+
+                // Violation messages (adapted for countdowns)
+                violation_driving_11h: "VIOLATION! You have exceeded 11 hours of driving.",
+                violation_driving_11h_upcoming: "WARNING: 40 minutes remaining for 11h driving limit.",
+                violation_on_duty_14h: "VIOLATION! 14 hours on-duty limit exceeded.",
+                violation_on_duty_14h_upcoming: "WARNING: 40 minutes remaining for 14h on-duty limit.",
+                violation_30min_break: "VIOLATION! A 30-minute break is required after 8h on-duty.",
+                violation_30min_break_upcoming: "WARNING: Approaching 8h on-duty, 30-minute break needed soon.",
+                violation_10hr_break_needed: "VIOLATION! You need 10 consecutive hours off-duty before driving/being on-duty.",
+                violation_hos_cycle: "VIOLATION! You have exceeded 70 hours in the 8-day cycle.",
+                violation_hos_remaining_upcoming: "WARNING: 5 hours remaining in your 8-day cycle.",
+                violation_no_break_driving: "VIOLATION! Driving over 8h without 30 min break.",
+                geolocation_not_supported: "Geolocation not supported in this browser.",
+                location_unavailable: "Location unavailable.",
+
+                // Language labels
+                es_lang: "ES",
+                en_lang: "EN",
+
+                // Calendar and History
+                history_log_title: "History & Logbook",
+                calendar_note: "Highlighted days have recorded data.",
+                calendar_violation_note: "Days with violations are shown in red.",
+                selected_day_log: "Logbook for Selected Day",
+                no_log_selected: "Select a day to view its log.",
+                sunday_short: "Sun",
+                monday_short: "Mon",
+                tuesday_short: "Tue",
+                wednesday_short: "Wed",
+                thursday_short: "Thu",
+                friday_short: "Fri",
+                saturday_short: "Sat",
+                january: "January",
+                february: "February",
+                march: "March",
+                april: "April",
+                may: "May",
+                june: "June",
+                july: "July",
+                august: "August",
+                september: "September",
+                october: "October",
+                november: "November",
+                december: "December",
+                route_map_title: "Daily Route:",
+                close_modal_button: "Close",
+
+                // Ready to Drive Modal
+                ready_to_drive_title: "Ready to Drive or Work?",
+                ready_to_drive_message: "To start a new driving or on-duty shift, a consecutive 10-hour off-duty or sleeper berth break is required.",
+                ready_to_drive_question: "Have you completed your 10-hour break?",
+                ready_to_drive_yes: "Yes, I'm ready (ON DUTY)",
+                ready_to_drive_no: "No, I need more rest (SLEEPER BERTH)",
+                pretrip_reminder: "Remember to perform your Pre-Trip inspection before starting to drive.",
+
+                // NEW: Personal Movement Modal
+                personal_movement_title: "Movement Detected",
+                personal_movement_message: "Vehicle movement has been detected while you were off-duty.",
+                personal_movement_question: "Are you starting a work shift or is this personal movement?",
+                start_work_driving: "Start Shift (DRIVING)",
+                personal_movement_pause: "Personal Movement (Pause ELD)",
+                eld_paused_notification: "Personal Movement mode activated. ELD is paused and will not record service hours.",
+                eld_resumed_notification: "Personal Movement mode deactivated. ELD has resumed service hour tracking."
+            }
+        };
+
+
+        // --- FUNCIONES DE UTILIDAD ---
+
+        // Función para formatear el tiempo de segundos a HH:MM:SS
+        function formatTime(seconds) {
+            const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+            const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        // Función para mostrar mensajes toast
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            if (!toastContainer) {
+                console.error("Toast container not found!");
+                return;
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            // Mostrar el toast
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10); // Pequeño retraso para que la transición CSS funcione
+
+            // Ocultar y eliminar el toast después de 5 segundos
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, 5000);
+        }
+
+        // --- MANEJO DE ESTADOS Y LÓGICA ELD ---
+
+        // Función para cambiar el estado del conductor
+        function changeStatus(newStatus) {
+            const now = Date.now();
+            const elapsed = Math.floor((now - statusStartTime) / 1000); // Tiempo en segundos en el estado anterior
+
+            // --- Lógica para acumular el tiempo del estado ANTERIOR ---
+            if (currentStatus === 'DRIVING') {
+                drivingTime += elapsed;
+            }
+            if (currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') {
+                onDutyTime += elapsed;
+            }
+
+            // --- Lógica para los descansos al salir de un estado de descanso ---
+            if (currentStatus === 'OFF_DUTY' || currentStatus === 'SLEEPER_BERTH') {
+                // Si el descanso actual fue de 30 minutos válidos, marca el fin
+                if (elapsed >= MIN_30_MIN_BREAK) {
+                    last30MinBreakEnd = now;
+                }
+                // Si el descanso actual fue de 10 horas válidas, marca el fin
+                if (elapsed >= MIN_10_HOUR_BREAK) {
+                    last10hrOffDutyCompletion = now;
+                }
+            }
+
+
+            // Actualizar el estado actual y el tiempo de inicio para el NUEVO estado
+            currentStatus = newStatus;
+            statusStartTime = now;
+
+            // Si el nuevo estado es DRIVING, guarda el tiempo de inicio para el contador de conducción continua
+            if (newStatus === 'DRIVING') {
+                drivingStartTime = now;
+                continuousDrivingTime = 0; // Reiniciar al iniciar una nueva sesión de conducción
+                isGeolocationPaused = false; // NEW: Si entra en DRIVING, se asume que no está pausado
+            } else {
+                // Si no está conduciendo, el tiempo de conducción continua debe reiniciarse
+                drivingStartTime = 0; // Asegura que el contador no siga acumulando si no está DRIVING
+                continuousDrivingTime = 0; // Reiniciar para la próxima sesión de conducción
+            }
+
+            // Si el nuevo estado es un descanso, guarda el tiempo de inicio para el 30 min break
+            if (newStatus === 'OFF_DUTY' || newStatus === 'SLEEPER_BERTH') {
+                 last30MinBreakStart = now; // Marca el inicio del potencial descanso
+                 last34hrBreakStart = now; // NEW: Marca el inicio del potencial descanso de 34 horas
+            } else {
+                // Si sale de OFF_DUTY/SLEEPER_BERTH, y no ha completado las 34h, reinicia el contador de 34h
+                if (thirtyFourHourBreakTime < MIN_34_HOUR_RESTART) {
+                    thirtyFourHourBreakTime = 0;
+                    last34hrBreakStart = 0;
+                }
+            }
+
+            // Actualizar la interfaz de usuario
+            updateActiveButton(newStatus);
+            updateDailyLog(newStatus); // Agrega la entrada al log diario
+            updateDailySummary(); // Actualiza el resumen
+
+            // Mostrar un mensaje toast
+            showToast(LANGUAGES[currentLanguage][`${newStatus.toLowerCase()}_status_message`], 'info');
+
+            // Guardar el estado después del cambio
+            saveState();
+        }
+
+        // Función para obtener las violaciones actuales
+        function getCurrentViolations() {
+            const violations = [];
+            const now = Date.now();
+            const elapsedInCurrentStatus = Math.floor((now - statusStartTime) / 1000);
+
+            const tempDrivingTime = drivingTime + (currentStatus === 'DRIVING' ? elapsedInCurrentStatus : 0);
+            const tempOnDutyTime = onDutyTime + ((currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') ? elapsedInCurrentStatus : 0);
+
+            // 11-hour driving rule
+            if (tempDrivingTime >= MAX_DRIVING_TIME) {
+                violations.push(LANGUAGES[currentLanguage].violation_driving_11h);
+            }
+            // 14-hour on-duty rule
+            if (tempOnDutyTime >= MAX_ON_DUTY_TIME) {
+                violations.push(LANGUAGES[currentLanguage].violation_on_duty_14h);
+            }
+            // 30-minute break rule
+            const eightHoursOnDuty = 8 * 3600;
+            const onDutySinceLast30MinBreak = (currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') ?
+                Math.max(0, (now - last30MinBreakEnd) / 1000) : 0;
+            if (onDutySinceLast30MinBreak >= eightHoursOnDuty && currentStatus !== 'OFF_DUTY' && currentStatus !== 'SLEEPER_BERTH') {
+                 violations.push(LANGUAGES[currentLanguage].violation_30min_break);
+            }
+
+            // 10-hour off-duty break rule (checked when going ON_DUTY/DRIVING)
+            const elapsedSinceLast10hrBreak = (now - last10hrOffDutyCompletion) / 1000;
+            // Solo se considera violación si no ha completado las 10h Y está en estado DRIVING u ON_DUTY
+            if ((currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') && elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK) {
+                violations.push(LANGUAGES[currentLanguage].violation_10hr_break_needed);
+            }
+            // 70h/8d cycle rule
+            if (tempOnDutyTime >= MAX_HOS_CYCLE) {
+                violations.push(LANGUAGES[currentLanguage].violation_hos_cycle);
+            }
+
+            return violations;
+        }
+
+        // Función para actualizar los temporizadores y verificar violaciones
+        function updateTimers() {
+            const now = Date.now(); // Tiempo actual en milisegundos
+
+            // Acumular tiempo en el estado actual para los contadores
+            const elapsedInCurrentStatus = Math.floor((now - statusStartTime) / 1000);
+            if (currentStatus === 'DRIVING') {
+                // Para el contador de conducción continua
+                continuousDrivingTime = elapsedInCurrentStatus;
+            }
+
+            // NEW: Actualizar el contador de 34 horas de descanso
+            if ((currentStatus === 'OFF_DUTY' || currentStatus === 'SLEEPER_BERTH') && !isGeolocationPaused) {
+                thirtyFourHourBreakTime = Math.floor((now - last34hrBreakStart) / 1000);
+            } else {
+                // Si no está en descanso o la geolocalización está pausada, no acumula para el descanso de 34h
+                // y se reinicia si no está en descanso
+                if (currentStatus !== 'OFF_DUTY' && currentStatus !== 'SLEEPER_BERTH') {
+                     thirtyFourHourBreakTime = 0;
+                     last34hrBreakStart = 0; // Reiniciar el inicio del descanso
+                }
+            }
+            // Habilitar/Deshabilitar el botón de reinicio de 70h
+            const restartButton = document.getElementById('restart-70h-cycle-btn');
+            if (restartButton) {
+                if (thirtyFourHourBreakTime >= MIN_34_HOUR_RESTART) {
+                    restartButton.disabled = false;
+                    restartButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                    restartButton.classList.add('bg-indigo-500', 'hover:bg-indigo-600');
+                } else {
+                    restartButton.disabled = true;
+                    restartButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+                    restartButton.classList.remove('bg-indigo-500', 'hover:bg-indigo-600');
+                }
+            }
+
+
+            // --- Cuentas Regresivas ---
+
+            // 1. Descanso de 30 minutos Restante (para el contador del timer)
+            let thirtyMinBreakNeededRemaining = 0;
+            if (currentStatus === 'OFF_DUTY' || currentStatus === 'SLEEPER_BERTH') {
+                if (elapsedInCurrentStatus >= MIN_30_MIN_BREAK) {
+                    thirtyMinBreakNeededRemaining = 0;
+                } else {
+                    thirtyMinBreakNeededRemaining = MIN_30_MIN_BREAK - elapsedInCurrentStatus;
+                }
+            } else {
+                thirtyMinBreakNeededRemaining = 0;
+            }
+            document.getElementById('thirty-minute-break-timer').textContent = formatTime(thirtyMinBreakNeededRemaining);
+
+
+            // 2. Tiempo de Conducción Restante (11 horas)
+            let drivingRemaining = Math.max(0, MAX_DRIVING_TIME - drivingTime);
+            if (currentStatus === 'DRIVING') {
+                drivingRemaining = Math.max(0, drivingRemaining - elapsedInCurrentStatus);
+            }
+            document.getElementById('driving-timer').textContent = formatTime(drivingRemaining);
+
+
+            // 3. Tiempo en Servicio Restante (14 horas)
+            let onDutyRemaining = Math.max(0, MAX_ON_DUTY_TIME - onDutyTime);
+            if (currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') {
+                onDutyRemaining = Math.max(0, onDutyRemaining - elapsedInCurrentStatus);
+            }
+            document.getElementById('on-duty-timer').textContent = formatTime(onDutyRemaining);
+
+
+            // 4. HOS Restantes para el Ciclo de 70 horas / 8 días
+            let hosRemaining = Math.max(0, MAX_HOS_CYCLE - onDutyTime);
+            if (currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') {
+                hosRemaining = Math.max(0, hosRemaining - elapsedInCurrentStatus);
+            }
+            document.getElementById('hos-remaining').textContent = formatTime(hosRemaining);
+
+
+            // 5. Descanso de 10 horas Restante (entre turnos)
+            let tenHourOffDutyBreakNeededRemaining = 0;
+            if (currentStatus === 'OFF_DUTY' || currentStatus === 'SLEEPER_BERTH') {
+                if (elapsedInCurrentStatus >= MIN_10_HOUR_BREAK) {
+                    tenHourOffDutyBreakNeededRemaining = 0;
+                } else {
+                    tenHourOffDutyBreakNeededRemaining = MIN_10_HOUR_BREAK - elapsedInCurrentStatus;
+                }
+            } else {
+                tenHourOffDutyBreakNeededRemaining = 0;
+            }
+            document.getElementById('ten-hour-break-timer').textContent = formatTime(tenHourOffDutyBreakNeededRemaining);
+
+            // NEW: 6. Descanso de 34 horas Restante (para reiniciar ciclo)
+            let thirtyFourHourRestartRemaining = Math.max(0, MIN_34_HOUR_RESTART - thirtyFourHourBreakTime);
+            document.getElementById('thirty-four-hour-restart-timer').textContent = formatTime(thirtyFourHourRestartRemaining);
+
+
+            // --- Mensajes de Advertencia (Toasts) ---
+
+            // ADVERTENCIA: 40 minutos antes del límite de 11h de conducción
+            if (drivingRemaining <= WARNING_THRESHOLD_DRIVING && drivingRemaining > 0) {
+                if (!localStorage.getItem('driving11hWarningShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_driving_11h_upcoming, 'warning');
+                    localStorage.setItem('driving11hWarningShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('driving11hWarningShown'); // Quita la bandera si la advertencia ya no aplica
+            }
+            if (drivingRemaining === 0 && (drivingTime + elapsedInCurrentStatus) >= MAX_DRIVING_TIME) { // Si ya superó el límite
+                if (!localStorage.getItem('driving11hViolationShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_driving_11h, 'error');
+                    localStorage.setItem('driving11hViolationShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('driving11hViolationShown');
+            }
+
+
+            // ADVERTENCIA: 40 minutos antes del límite de 14h en servicio
+            if (onDutyRemaining <= WARNING_THRESHOLD_ON_DUTY && onDutyRemaining > 0) {
+                if (!localStorage.getItem('onDuty14hWarningShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_on_duty_14h_upcoming, 'warning');
+                    localStorage.setItem('onDuty14hWarningShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('onDuty14hWarningShown');
+            }
+            if (onDutyRemaining === 0 && (onDutyTime + elapsedInCurrentStatus) >= MAX_ON_DUTY_TIME) { // Si ya superó el límite
+                if (!localStorage.getItem('onDuty14hViolationShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_on_duty_14h, 'error');
+                    localStorage.setItem('onDuty14hViolationShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('onDuty14hViolationShown');
+            }
+
+
+            // ADVERTENCIA/VIOLACIÓN: Descanso de 30 minutos
+            const eightHoursOnDuty = 8 * 3600;
+            const onDutySinceLast30MinBreak = (currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') ?
+                Math.max(0, (now - last30MinBreakEnd) / 1000) : 0; // Tiempo en servicio desde el último descanso de 30 min
+
+            if (onDutySinceLast30MinBreak >= eightHoursOnDuty && currentStatus !== 'OFF_DUTY' && currentStatus !== 'SLEEPER_BERTH') {
+                if (!localStorage.getItem('30minBreakViolationShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_30min_break, 'error');
+                    localStorage.setItem('30minBreakViolationShown', 'true');
+                }
+            } else if (onDutySinceLast30MinBreak >= (eightHoursOnDuty - WARNING_THRESHOLD_ON_DUTY) && onDutySinceLast30MinBreak < eightHoursOnDuty && currentStatus !== 'OFF_DUTY' && currentStatus !== 'SLEEPER_BERTH') {
+                if (!localStorage.getItem('30minBreakWarningShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_30min_break_upcoming, 'warning');
+                    localStorage.setItem('30minBreakWarningShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('30minBreakViolationShown');
+                localStorage.removeItem('30minBreakWarningShown');
+            }
+
+
+            // ADVERTENCIA/VIOLACIÓN: 10 horas de descanso entre turnos
+            // Esto se verifica al intentar cambiar a DRIVING o ON_DUTY, no como un toast continuo.
+            // Si el estado actual es DRIVING o ON_DUTY, y el último descanso de 10 horas no ha terminado, es una violación
+            const elapsedSinceLast10hrBreak = (now - last10hrOffDutyCompletion) / 1000;
+            if ((currentStatus === 'DRIVING' || currentStatus === 'ON_DUTY') && elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK) {
+                if (!localStorage.getItem('10hrBreakViolationShown')) {
+                    localStorage.setItem('10hrBreakViolationShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('10hrBreakViolationShown');
+            }
+
+
+            // ADVERTENCIA: 5 horas antes del límite del ciclo de 70h/8d
+            if (hosRemaining <= (5 * 3600) && hosRemaining > 0) {
+                if (!localStorage.getItem('hosCycleWarningShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_hos_remaining_upcoming, 'warning');
+                    localStorage.setItem('hosCycleWarningShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('hosCycleWarningShown');
+            }
+
+            if (hosRemaining === 0 && (onDutyTime + elapsedInCurrentStatus) >= MAX_HOS_CYCLE) {
+                if (!localStorage.getItem('hosCycleViolationShown')) {
+                    showToast(LANGUAGES[currentLanguage].violation_hos_cycle, 'error');
+                    localStorage.setItem('hosCycleViolationShown', 'true');
+                }
+            } else {
+                localStorage.removeItem('hosCycleViolationShown');
+            }
+        }
+
+
+        // --- GEOLOCALIZACIÓN Y DETECCIÓN DE MOVIMIENTO ---
+
+        // Función para calcular la distancia entre dos puntos (fórmula de Haversine)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            const d = R * c; // in metres
+            return d;
+        }
+
+        // Función para obtener la ubicación actual una sola vez
+        function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            lastKnownLat = position.coords.latitude;
+                            lastKnownLon = position.coords.longitude;
+                            fetchLocationName(lastKnownLat, lastKnownLon).then(() => {
+                                updateDailyLog(currentStatus); // Log initial location
+                                resolve();
+                            });
+                        },
+                        (error) => {
+                            console.error("Error al obtener la ubicación inicial:", error.message);
+                            userLocation = LANGUAGES[currentLanguage].location_unavailable;
+                            document.getElementById('location-display').textContent = userLocation;
+                            // Set default location if actual location fails (Monterrey)
+                            lastKnownLat = 25.6866;
+                            lastKnownLon = -100.3161;
+                            updateDailyLog(currentStatus); // Log with default location
+                            resolve(); // Resolve even on error to continue app flow
+                        },
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    );
+                } else {
+                    userLocation = LANGUAGES[currentLanguage].geolocation_not_supported;
+                    document.getElementById('location-display').textContent = userLocation;
+                    // Set default location if geolocation not supported (Monterrey)
+                    lastKnownLat = 25.6866;
+                    lastKnownLon = -100.3161;
+                    updateDailyLog(currentStatus); // Log with default location
+                    resolve(); // Resolve immediately if not supported
+                }
+            });
+        }
+
+        // Función para obtener el nombre de la ubicación a partir de las coordenadas
+        async function fetchLocationName(latitude, longitude) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
+                const data = await response.json();
+                if (data.address) {
+                    let addressParts = [];
+                    if (data.address.road) addressParts.push(data.address.road);
+                    if (data.address.house_number) addressParts.push(data.address.house_number);
+                    if (data.address.city) addressParts.push(data.address.city);
+                    else if (data.address.town) addressParts.push(data.address.town);
+                    else if (data.address.village) addressParts.push(data.address.village);
+                    if (data.address.state) addressParts.push(data.address.state);
+                    if (data.address.country) addressParts.push(data.address.country);
+                    userLocation = addressParts.length > 0 ? addressParts.join(', ') : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                } else {
+                    userLocation = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                }
+                document.getElementById('location-display').textContent = userLocation;
+            } catch (error) {
+                console.error("Error reverse geocoding:", error);
+                userLocation = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                document.getElementById('location-display').textContent = userLocation;
+            }
+        }
+
+
+        function startGeolocationTracking() {
+            if (navigator.geolocation) {
+                // Opciones para watchPosition
+                const geoOptions = {
+                    enableHighAccuracy: true,
+                    timeout: 10000, // Cada 10 segundos intentará obtener una nueva posición
+                    maximumAge: 0 // No usar caché
+                };
+
+                watchPositionId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const newLat = position.coords.latitude;
+                        const newLon = position.coords.longitude;
+                        const newTimestamp = Date.now();
+
+                        // Actualizar la ubicación mostrada y las variables globales
+                        lastKnownLat = newLat;
+                        lastKnownLon = newLon;
+                        fetchLocationName(newLat, newLon); // Actualiza el nombre en la UI
+
+                        // Lógica de detección de movimiento solo si el ELD no está pausado
+                        if (!isGeolocationPaused) {
+                            if (lastPositionForMovementCheck) {
+                                const distance = calculateDistance(
+                                    lastPositionForMovementCheck.lat,
+                                    lastPositionForMovementCheck.lon,
+                                    newLat,
+                                    newLon
+                                );
+
+                                if (distance >= MOVEMENT_THRESHOLD_METERS) {
+                                    // Si se detecta movimiento significativo
+                                    if (currentStatus === 'OFF_DUTY' || currentStatus === 'SLEEPER_BERTH') {
+                                        // NEW: Mostrar modal de movimiento personal
+                                        hideAllModals(); // Hide other modals
+                                        showPersonalMovementModal();
+                                        // Do NOT change status here, let the user decide in the modal
+                                    } else if (currentStatus !== 'DRIVING') {
+                                        // If not driving but not off-duty/sleeper (e.g., On-Duty and starts moving)
+                                        changeStatus('DRIVING');
+                                    } else {
+                                        // If already DRIVING and moving, just log for map
+                                        updateDailyLog(currentStatus);
+                                    }
+                                    lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                                } else if (currentStatus === 'DRIVING' && distance > 5) {
+                                    // If in DRIVING and small movement, log for more map points
+                                    updateDailyLog(currentStatus);
+                                    lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                                } else {
+                                    lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                                }
+                            } else {
+                                // If it's the first watchPosition update, initialize lastPositionForMovementCheck
+                                if (lastKnownLat !== newLat || lastKnownLon !== newLon) {
+                                    lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                                    updateDailyLog(currentStatus);
+                                } else {
+                                    lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                                }
+                            }
+                        } else {
+                             // If ELD is paused, just update lastPositionForMovementCheck for potential re-activation
+                            lastPositionForMovementCheck = { lat: newLat, lon: newLon, timestamp: newTimestamp };
+                        }
+
+                    },
+                    (error) => {
+                        console.error("Error en watchPosition:", error.message);
+                        userLocation = LANGUAGES[currentLanguage].location_unavailable;
+                        document.getElementById('location-display').textContent = userLocation;
+                        // If watchPosition fails, we can't do automatic movement detection
+                    },
+                    geoOptions
+                );
+            } else {
+                userLocation = LANGUAGES[currentLanguage].geolocation_not_supported;
+                document.getElementById('location-display').textContent = userLocation;
+            }
+        }
+
+        function stopGeolocationTracking() {
+            if (watchPositionId !== null) {
+                navigator.geolocation.clearWatch(watchPositionId);
+                watchPositionId = null;
+                console.log("Geolocation tracking stopped.");
+            }
+        }
+
+
+        // --- REGISTRO DIARIO Y RESUMEN ---
+
+        function updateDailyLog(status) {
+            const now = new Date();
+            const time = now.toLocaleTimeString(currentLanguage === 'es' ? 'es-ES' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const logEntry = {
+                timestamp: now.getTime(), // Guardar timestamp para ordenar y calcular duraciones
+                time: time,
+                status: LANGUAGES[currentLanguage][status.toLowerCase()], // Traduce el estado
+                originalStatus: status, // Guarda el estado original para cálculos
+                location: userLocation,
+                latitude: lastKnownLat, // ¡Ahora guardamos las coordenadas!
+                longitude: lastKnownLon, // ¡Ahora guardamos las coordenadas!
+                violations: getCurrentViolations() // Guarda las violaciones activas en este punto
+            };
+
+            if (!dailyLog[currentLogDate]) {
+                dailyLog[currentLogDate] = [];
+            }
+            // Only add log entry if ELD is not paused for HOS tracking
+            if (!isGeolocationPaused) {
+                dailyLog[currentLogDate].push(logEntry);
+            } else {
+                // If paused, still log a "Personal Movement" entry for record-keeping, without HOS implications
+                const personalMovementLog = {
+                    timestamp: now.getTime(),
+                    time: time,
+                    status: 'Personal Movement', // Specific status for personal movement
+                    originalStatus: 'PERSONAL_MOVEMENT',
+                    location: userLocation,
+                    latitude: lastKnownLat,
+                    longitude: lastKnownLon,
+                    violations: [] // No HOS violations for personal movement
+                };
+                dailyLog[currentLogDate].push(personalMovementLog);
+            }
+
+
+            // Mantener solo los últimos 35 días de datos
+            const thirtyFiveDaysAgo = new Date();
+            thirtyFiveDaysAgo.setDate(thirtyFiveDaysAgo.getDate() - 35);
+            for (const date in dailyLog) {
+                if (new Date(date) < thirtyFiveDaysAgo) {
+                    delete dailyLog[date];
+                }
+            }
+
+            saveState(); // Guardar el estado después de añadir la entrada
+            if (!document.getElementById('historyModal').classList.contains('hidden')) {
+                // Solo refrescar si el modal está abierto y el día seleccionado es el actual
+                if (selectedDate === currentLogDate) {
+                    displaySelectedDayLog(selectedDate); // Refrescar si el modal está abierto
+                }
+                highlightDaysWithData(); // Para actualizar los días con logs en el calendario
+            }
+        }
+
+
+        function updateDailySummary() {
+            const summaryDisplay = document.getElementById('daily-summary');
+            const totals = {
+                DRIVING: 0,
+                ON_DUTY: 0,
+                OFF_DUTY: 0,
+                SLEEPER_BERTH: 0,
+                PERSONAL_MOVEMENT: 0 // NEW: Add personal movement to summary
+            };
+
+            const now = Date.now();
+            // Clonar dailyLog[currentLogDate] para evitar mutaciones mientras iteramos
+            const entriesToday = JSON.parse(JSON.stringify(dailyLog[currentLogDate] || []));
+
+            let lastRecordedTimestamp = statusStartTime;
+            if (entriesToday.length > 0) {
+                lastRecordedTimestamp = entriesToday[entriesToday.length - 1].timestamp;
+            }
+
+            // Calculate duration for the current status up to 'now'
+            const elapsedInCurrentStatus = Math.floor((now - lastRecordedTimestamp) / 1000);
+
+            // Only add current status's duration if ELD is not paused for HOS tracking
+            if (!isGeolocationPaused && totals.hasOwnProperty(currentStatus)) {
+                totals[currentStatus] += elapsedInCurrentStatus;
+            } else if (isGeolocationPaused && currentStatus === 'OFF_DUTY') { // If paused, and in OFF_DUTY, this time is personal movement
+                totals['PERSONAL_MOVEMENT'] += elapsedInCurrentStatus;
+            }
+
+
+            // Add durations from logged entries (excluding PERSONAL_MOVEMENT from HOS totals)
+            for (let i = 0; i < entriesToday.length; i++) {
+                const entry = entriesToday[i];
+                const nextTimestamp = (i + 1 < entriesToday.length) ? entriesToday[i + 1].timestamp : now;
+                const duration = Math.floor((nextTimestamp - entry.timestamp) / 1000);
+
+                // For daily summary, we want to show all recorded time
+                if (duration > 0) {
+                    if (entry.originalStatus === 'PERSONAL_MOVEMENT') {
+                        totals.PERSONAL_MOVEMENT += duration;
+                    } else if (totals.hasOwnProperty(entry.originalStatus)) {
+                        totals[entry.originalStatus] += duration;
+                    }
+                }
+            }
+
+
+            summaryDisplay.innerHTML = `
+                <p class="mb-1"><span class="font-semibold">${LANGUAGES[currentLanguage].total_driving}:</span> ${formatTime(totals.DRIVING)}</p>
+                <p class="mb-1"><span class="font-semibold">${LANGUAGES[currentLanguage].total_on_duty}:</span> ${formatTime(totals.ON_DUTY)}</p>
+                <p class="mb-1"><span class="font-semibold">${LANGUAGES[currentLanguage].total_off_duty}:</span> ${formatTime(totals.OFF_DUTY)}</p>
+                <p class="mb-1"><span class="font-semibold">${LANGUAGES[currentLanguage].total_sleeper_berth}:</span> ${formatTime(totals.SLEEPER_BERTH)}</p>
+                <p class="mb-1 text-gray-600"><span class="font-semibold">Personal Movement:</span> ${formatTime(totals.PERSONAL_MOVEMENT)}</p>
+            `;
+        }
+
+        // --- MANEJO DE ALMACENAMIENTO (LOCAL STORAGE) ---
+
+        function saveState() {
+            const state = {
+                currentStatus,
+                statusStartTime,
+                drivingTime,
+                onDutyTime,
+                last30MinBreakStart,
+                last30MinBreakEnd,
+                last10hrOffDutyCompletion,
+                thirtyFourHourBreakTime, // NEW
+                last34hrBreakStart, // NEW
+                drivingStartTime,
+                continuousDrivingTime,
+                dailyLog, // Save the entire dailyLog
+                currentLogDate,
+                currentLanguage,
+                lastKnownLat,
+                lastKnownLon,
+                lastPositionForMovementCheck, // Save for consistent movement tracking
+                isGeolocationPaused // NEW
+            };
+            localStorage.setItem('eldSimulatorState', JSON.stringify(state));
+            localStorage.setItem('lastLogDate', currentLogDate); // Guardar la última fecha de log
+        }
+
+        function loadState() {
+            const savedState = localStorage.getItem('eldSimulatorState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                currentStatus = state.currentStatus;
+                statusStartTime = state.statusStartTime;
+                drivingTime = state.drivingTime;
+                onDutyTime = state.onDutyTime;
+                last30MinBreakStart = state.last30MinBreakStart || 0;
+                last30MinBreakEnd = state.last30MinBreakEnd || 0;
+                last10hrOffDutyCompletion = state.last10hrOffDutyCompletion || 0;
+                thirtyFourHourBreakTime = state.thirtyFourHourBreakTime || 0; // NEW
+                last34hrBreakStart = state.last34hrBreakStart || 0; // NEW
+                drivingStartTime = state.drivingStartTime || 0;
+                continuousDrivingTime = state.continuousDrivingTime || 0;
+                dailyLog = state.dailyLog || {};
+                currentLogDate = state.currentLogDate || new Date().toISOString().slice(0, 10);
+                currentLanguage = state.currentLanguage || 'es';
+                lastKnownLat = state.lastKnownLat || null;
+                lastKnownLon = state.lastKnownLon || null;
+                lastPositionForMovementCheck = state.lastPositionForMovementCheck || null;
+                isGeolocationPaused = state.isGeolocationPaused || false; // NEW
+
+                // Asegurar que statusStartTime no sea en el futuro si el usuario cambió la hora del sistema
+                if (statusStartTime > Date.now()) {
+                    statusStartTime = Date.now();
+                }
+
+                // Asegurar que las marcas de tiempo de descanso no sean en el futuro
+                if (last30MinBreakStart > Date.now()) last30MinBreakStart = 0;
+                if (last30MinBreakEnd > Date.now()) last30MinBreakEnd = 0;
+                if (last10hrOffDutyCompletion > Date.now()) last10hrOffDutyCompletion = 0;
+                if (drivingStartTime > Date.now()) drivingStartTime = 0;
+                // NEW: Reset thirtyFourHourBreakTime if last34hrBreakStart is in the future
+                if (last34hrBreakStart > Date.now()) {
+                    thirtyFourHourBreakTime = 0;
+                    last34hrBreakStart = 0;
+                }
+
+                // Si la fecha del log guardada es diferente a la actual, es un nuevo día
+                const today = new Date().toISOString().slice(0, 10);
+                if (currentLogDate !== today) {
+                    // Iniciar nuevo día de servicio
+                    // If the user was in a "Personal Movement" state, they should resume OFF_DUTY by default
+                    // but not trigger the welcome modal if they weren't explicitly off-duty/sleeper.
+                    resetHoursForNewDay(true); // true means it's a new day, don't show welcome modal immediately
+                    currentLogDate = today; // Asegurar que currentLogDate sea la actual
+                    showToast(LANGUAGES[currentLanguage].start_new_day_message, 'success');
+                }
+
+            } else {
+                // Estado inicial si no hay nada guardado
+                resetHoursForNewDay(false); // No es un nuevo día, es la primera carga
+            }
+        }
+
+
+        // --- FUNCIONES DE INICIALIZACIÓN Y EVENTOS ---
+
+        function updateActiveButton(activeStatus) {
+            document.querySelectorAll('.status-btn').forEach(button => {
+                button.classList.remove('ring-4', 'ring-offset-2', 'ring-blue-500', 'scale-105', 'font-extrabold');
+                button.classList.add('bg-opacity-80');
+            });
+            const activeButton = document.getElementById(`${activeStatus.toLowerCase()}-btn`);
+            if (activeButton) {
+                activeButton.classList.add('ring-4', 'ring-offset-2', 'ring-blue-500', 'scale-105', 'font-extrabold');
+                activeButton.classList.remove('bg-opacity-80');
+            }
+        }
+
+        // Función para aplicar las traducciones a los elementos con data-lang-key
+        function updateContent() {
+            document.querySelectorAll('[data-lang-key]').forEach(element => {
+                const key = element.getAttribute('data-lang-key');
+                if (LANGUAGES[currentLanguage][key]) {
+                    element.textContent = LANGUAGES[currentLanguage][key];
+                }
+            });
+            // Traducir dinámicamente el estado actual y la ubicación (los spans)
+            document.getElementById('current-status-display').textContent = LANGUAGES[currentLanguage][currentStatus.toLowerCase()];
+            document.getElementById('location-display').textContent = userLocation;
+
+            // Actualizar textos de botones que no tienen data-lang-key para simplificar
+            document.getElementById('driving-btn').textContent = LANGUAGES[currentLanguage].driving.toUpperCase();
+            document.getElementById('on-duty-btn').textContent = LANGUAGES[currentLanguage].on_duty.toUpperCase() + ' (Non-Driving)';
+            document.getElementById('off-duty-btn').textContent = LANGUAGES[currentLanguage].off_duty.toUpperCase();
+            document.getElementById('sleeper-berth-btn').textContent = LANGUAGES[currentLanguage].sleeper_berth.toUpperCase();
+
+            updateDailySummary(); // Asegurarse de que el resumen se traduzca también
+            if (!document.getElementById('historyModal').classList.contains('hidden')) {
+                renderCalendar(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth()); // Re-renderizar calendario para traducciones
+                // Note: displaySelectedDayLog is called when a day is clicked or when modal opens
+            }
+        }
+
+        function hideAllModals() {
+            document.getElementById('welcome-modal').classList.add('hidden');
+            document.getElementById('ready-to-drive-modal').classList.add('hidden');
+            document.getElementById('personal-movement-modal').classList.add('hidden');
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+
+        function showWelcomeModal() {
+            hideAllModals();
+            document.getElementById('welcome-modal').classList.remove('hidden');
+        }
+
+        function showReadyToDriveModal() {
+            hideAllModals();
+            document.getElementById('ready-to-drive-modal').classList.remove('hidden');
+        }
+
+        function showPersonalMovementModal() {
+            hideAllModals();
+            document.getElementById('personal-movement-modal').classList.remove('hidden');
+        }
+
+
+        function resetHoursForNewDay(isLoadedNewDay) {
+            currentStatus = 'OFF_DUTY';
+            statusStartTime = Date.now();
+            drivingTime = 0;
+            onDutyTime = 0;
+            last30MinBreakStart = 0;
+            last30MinBreakEnd = 0;
+            last10hrOffDutyCompletion = Date.now(); // Assume a new day implies 10h break completed
+            thirtyFourHourBreakTime = 0; // NEW: Reset 34hr break counter
+            last34hrBreakStart = Date.now(); // NEW: Start counting 34hr break for the new day
+            drivingStartTime = 0;
+            continuousDrivingTime = 0;
+            dailyLog = {}; // Clear log of the previous day
+            currentLogDate = new Date().toISOString().slice(0, 10); // New date
+            isGeolocationPaused = false; // Ensure not paused for a new day
+            saveState(); // Save the reset state
+            updateActiveButton(currentStatus);
+            updateDailySummary();
+            // If it's a new day loaded from storage, we don't want to immediately show the welcome modal.
+            // It will be handled by the DOMContentLoaded check.
+            if (!isLoadedNewDay) {
+                // If it's explicitly a "start new day" action from the welcome modal
+                // or initial first load, then we might want to show it.
+                // But the DOMContentLoaded handles the initial load.
+            }
+        }
+
+        // NEW: Function to handle 70h cycle restart
+        function restart70hCycle() {
+            if (thirtyFourHourBreakTime >= MIN_34_HOUR_RESTART) {
+                drivingTime = 0;
+                onDutyTime = 0;
+                last10hrOffDutyCompletion = Date.now(); // After 34h break, 10h is also met
+                thirtyFourHourBreakTime = 0; // Reset 34h counter
+                last34hrBreakStart = Date.now(); // Start new 34h count
+                saveState();
+                updateTimers();
+                updateDailySummary();
+                showToast(LANGUAGES[currentLanguage].cycle_70h_reset_success, 'success');
+            } else {
+                showToast(LANGUAGES[currentLanguage].cycle_70h_reset_needed, 'error');
+            }
+        }
+
+
+        // --- CALENDARIO Y MODAL DE HISTORIAL ---
+        let currentCalendarDate = new Date(); // Fecha actual para el calendario
+        let selectedDate = null; // Fecha seleccionada en el calendario
+
+        const monthNames = [
+            'january', 'february', 'march', 'april', 'may', 'june',
+            'july', 'august', 'september', 'october', 'november', 'december'
+        ];
+        const dayNames = [
+            'sunday_short', 'monday_short', 'tuesday_short', 'wednesday_short',
+            'thursday_short', 'friday_short', 'saturday_short'
+        ];
+
+        function renderCalendar(year, month) {
+            const calendarEl = document.getElementById('calendar');
+            const currentMonthYearEl = document.getElementById('current-month-year');
+            calendarEl.innerHTML = ''; // Limpiar calendario
+
+            currentMonthYearEl.textContent = `${LANGUAGES[currentLanguage][monthNames[month]]} ${year}`;
+
+            // Add day names row
+            dayNames.forEach(dayNameKey => {
+                const dayNameDiv = document.createElement('div');
+                dayNameDiv.classList.add('font-semibold', 'text-gray-700', 'py-2');
+                dayNameDiv.textContent = LANGUAGES[currentLanguage][dayNameKey];
+                calendarEl.appendChild(dayNameDiv);
+            });
+
+            const firstDayOfMonth = new Date(year, month, 1);
+            const lastDayOfMonth = new Date(year, month + 1, 0);
+            const numDays = lastDayOfMonth.getDate();
+            const startDay = firstDayOfMonth.getDay(); // 0 for Sunday, 1 for Monday, etc.
+
+            // Fill leading empty days
+            for (let i = 0; i < startDay; i++) {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.classList.add('bg-gray-50', 'text-gray-400');
+                calendarEl.appendChild(emptyDiv);
+            }
+
+            // Fill days of the month
+            for (let day = 1; day <= numDays; day++) {
+                const dayDiv = document.createElement('div');
+                dayDiv.classList.add('bg-white', 'text-gray-900', 'shadow-sm', 'py-2');
+                dayDiv.textContent = day;
+                const fullDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                dayDiv.dataset.date = fullDate;
+
+                dayDiv.addEventListener('click', () => {
+                    // Remove ring from previously selected day
+                    const prevSelected = document.querySelector('#calendar > div.ring-2');
+                    if (prevSelected) {
+                        prevSelected.classList.remove('ring-2');
+                    }
+                    // Add ring to current selected day
+                    dayDiv.classList.add('ring-2');
+                    selectedDate = fullDate;
+                    displaySelectedDayLog(fullDate);
+                });
+                calendarEl.appendChild(dayDiv);
+            }
+            highlightDaysWithData();
+        }
+
+        function highlightDaysWithData() {
+            const calendarDays = document.querySelectorAll('#calendar > div[data-date]');
+            calendarDays.forEach(dayDiv => {
+                const date = dayDiv.dataset.date;
+                // Check for logs
+                const hasLogs = dailyLog[date] && dailyLog[date].length > 0;
+                // Check for violations on this day
+                const hasViolations = hasLogs && dailyLog[date].some(entry => entry.violations && entry.violations.length > 0);
+
+                // Remove previous highlighting classes
+                dayDiv.classList.remove('bg-blue-200', 'font-bold', 'text-blue-800', 'has-violations');
+
+                if (hasLogs) {
+                    dayDiv.classList.add('bg-blue-200', 'font-bold', 'text-blue-800');
+                }
+                if (hasViolations) {
+                    dayDiv.classList.add('has-violations'); // Custom class for red background
+                }
+
+                // Highlight current day if it's the selected date or today
+                const today = new Date().toISOString().slice(0, 10);
+                if (date === today) {
+                    dayDiv.classList.add('ring-2', 'ring-blue-500'); // Ensure current day is always highlighted
+                    if (!selectedDate) { // If no day was previously selected, select today
+                        selectedDate = today;
+                    }
+                }
+
+                // If this is the currently selected date, ensure it has the ring
+                if (date === selectedDate) {
+                     const prevSelected = document.querySelector('#calendar > div.ring-2');
+                     if (prevSelected && prevSelected !== dayDiv) { // Ensure not to remove ring from 'today' if it's also selected
+                         prevSelected.classList.remove('ring-2');
+                     }
+                    dayDiv.classList.add('ring-2');
+                }
+            });
+        }
+
+
+        function displaySelectedDayLog(date) {
+            const logContentEl = document.getElementById('selectedDayLogContent');
+            const selectedDayTitleEl = document.getElementById('selected-day-title');
+            selectedDayTitleEl.textContent = `${LANGUAGES[currentLanguage].selected_day_log}: ${date}`;
+            logContentEl.innerHTML = ''; // Clear previous log
+
+            const entries = dailyLog[date] || [];
+
+            if (entries.length === 0) {
+                logContentEl.innerHTML = `<p class="text-center text-gray-500">${LANGUAGES[currentLanguage].no_log_selected}</p>`;
+                plotRoute([]); // Clear map if no logs
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200';
+            table.innerHTML = `
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${LANGUAGES[currentLanguage].log_entry_time}</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${LANGUAGES[currentLanguage].log_entry_status}</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${LANGUAGES[currentLanguage].log_entry_location}</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${LANGUAGES[currentLanguage].log_entry_violations}</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                </tbody>
+            `;
+            const tbody = table.querySelector('tbody');
+
+            entries.forEach(entry => {
+                const row = tbody.insertRow();
+                const violationsText = entry.violations && entry.violations.length > 0 ? entry.violations.map(v => v.replace('¡VIOLACIÓN! ', '')).join(', ') : '';
+                row.innerHTML = `
+                    <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${entry.time}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${entry.status}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${entry.location}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-sm ${violationsText ? 'text-red-600 font-semibold' : 'text-gray-500'}">${violationsText}</td>
+                `;
+            });
+            logContentEl.appendChild(table);
+
+            plotRoute(entries); // Plot route on map for the selected day
+        }
+
+        // --- MAP FUNCTIONS ---
+        let map = null;
+        let routePolyline = null;
+        let violationPolylines = [];
+
+        function initMap(initialLat = 25.6866, initialLon = -100.3161) { // Default to Monterrey, Mexico if no location available
+            if (map === null) {
+                map = L.map('map-container').setView([initialLat, initialLon], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+            } else {
+                // If map already exists, just update its view
+                map.setView([initialLat, initialLon], map.getZoom());
+            }
+            // Invalidate size to ensure map renders correctly in a potentially hidden container
+            map.invalidateSize();
+        }
+
+        // Function to clear all previously drawn polylines
+        function clearPolylines() {
+            if (routePolyline) {
+                map.removeLayer(routePolyline);
+                routePolyline = null;
+            }
+            violationPolylines.forEach(polyline => {
+                map.removeLayer(polyline);
+            });
+            violationPolylines = [];
+        }
+
+        function plotRoute(logEntries) {
+            if (map === null) {
+                // Initialize map if it's not already initialized
+                const defaultLat = lastKnownLat || 25.6866;
+                const defaultLon = lastKnownLon || -100.3161;
+                initMap(defaultLat, defaultLon);
+            }
+
+            clearPolylines(); // Clear any previous routes before plotting new ones
+
+            const latlngs = []; // To store all points for fitting bounds
+            let lastValidLat = null;
+            let lastValidLon = null;
+
+            if (logEntries.length === 0) {
+                // If no entries, set map to last known location or default
+                const centerLat = lastKnownLat || 25.6866;
+                const centerLon = lastKnownLon || -100.3161;
+                map.setView([centerLat, centerLon], 13);
+                return;
+            }
+
+            // Process entries to create segments
+            for (let i = 0; i < logEntries.length; i++) {
+                const entry = logEntries[i];
+                if (entry.latitude === null || entry.longitude === null) {
+                    console.warn(`Entry ${i} has null coordinates, skipping for map:`, entry);
+                    continue; // Skip entries without valid coordinates
+                }
+
+                const currentLat = entry.latitude;
+                const currentLon = entry.longitude;
+                latlngs.push([currentLat, currentLon]); // Add to bounds calculation
+
+                if (lastValidLat !== null && lastValidLon !== null) {
+                    const segmentCoords = [[lastValidLat, lastValidLon], [currentLat, currentLon]];
+                    const segmentHasViolation = entry.violations && entry.violations.length > 0; // Check violations at the end of the segment
+                    // NEW: Special color for 'Personal Movement'
+                    const segmentColor = entry.originalStatus === 'PERSONAL_MOVEMENT' ? 'purple' : (segmentHasViolation ? 'red' : 'blue');
+
+                    const polyline = L.polyline(segmentCoords, {
+                        color: segmentColor,
+                        weight: 5,
+                        opacity: 0.7
+                    }).addTo(map);
+                    violationPolylines.push(polyline); // Store for clearing
+                } else {
+                     // Add a marker for the very first valid point
+                    L.marker([currentLat, currentLon]).addTo(map)
+                        .bindPopup(entry.location || 'Inicio de Ruta').openPopup();
+                }
+
+                lastValidLat = currentLat;
+                lastValidLon = currentLon;
+            }
+
+            // Add a marker for the very last valid point
+            if (lastValidLat !== null && lastValidLon !== null && logEntries.length > 0) {
+                 const lastEntry = logEntries[logEntries.length - 1];
+                 L.marker([lastValidLat, lastValidLon]).addTo(map)
+                    .bindPopup(lastEntry.location || 'Fin de Ruta').openPopup();
+            }
+
+
+            // Fit map to route bounds
+            if (latlngs.length > 0) {
+                const bounds = L.latLngBounds(latlngs);
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [50, 50] }); // Add padding for better view
+                } else if (latlngs.length === 1) {
+                    map.setView(latlngs[0], 13); // If only one point, just center on it
+                }
+            } else {
+                // Fallback to default location if no valid coordinates in logEntries
+                const defaultLat = lastKnownLat || 25.6866;
+                const defaultLon = lastKnownLon || -100.3161;
+                map.setView([defaultLat, defaultLon], 13);
+            }
+        }
+
+
+        // --- LISTENERS DE EVENTOS ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadState(); // Cargar el estado guardado al inicio
+
+            // Set initial language toggle state based on loaded currentLanguage
+            const languageSwitch = document.getElementById('languageSwitch');
+            if (currentLanguage === 'en') {
+                languageSwitch.checked = true;
+            } else {
+                languageSwitch.checked = false;
+            }
+
+            updateContent(); // Aplicar traducciones iniciales
+
+            // Get initial location and then start continuous tracking
+            await getCurrentLocation(); // Wait for initial location to be fetched
+            startGeolocationTracking(); // Start continuous tracking after initial location is set
+
+            updateDailySummary();
+            updateActiveButton(currentStatus); // Actualizar el botón activo basado en el estado cargado
+            intervalId = setInterval(updateTimers, 1000); // Iniciar los temporizadores
+            updateTimers(); // Llamada inicial para actualizar inmediatamente
+
+            // Lógica para mostrar el modal de bienvenida/reinicio
+            const today = new Date().toISOString().slice(0, 10);
+            const lastLogDate = localStorage.getItem('lastLogDate');
+
+            // Only show welcome modal if it's the first time loading or a new day has started
+            if (!lastLogDate || lastLogDate !== today) {
+                showWelcomeModal();
+            }
+        });
+
+
+        // Asignar listeners a los botones de estado
+        document.getElementById('driving-btn').addEventListener('click', () => {
+            // Regla de 10 horas: No se puede conducir ni estar ON_DUTY si no se han completado 10 horas OFF_DUTY/SLEEPER BERTH consecutivas
+            const elapsedSinceLast10hrBreak = (Date.now() - last10hrOffDutyCompletion) / 1000;
+            if (elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK) {
+                showReadyToDriveModal(); // Show the new modal instead of a direct violation toast
+                return; // Prevent status change immediately
+            }
+            isGeolocationPaused = false; // If explicitly choosing DRIVING, disable personal movement pause
+            changeStatus('DRIVING');
+        });
+
+        document.getElementById('on-duty-btn').addEventListener('click', () => {
+            // Regla de 10 horas: No se puede conducir ni estar ON_DUTY si no se han completado 10 horas OFF_DUTY/SLEEPER BERTH consecutivas
+            const elapsedSinceLast10hrBreak = (Date.now() - last10hrOffDutyCompletion) / 1000;
+            if (elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK) {
+                showReadyToDriveModal(); // Show the new modal instead of a direct violation toast
+                return; // Prevent status change immediately
+            }
+            isGeolocationPaused = false; // If explicitly choosing ON_DUTY, disable personal movement pause
+            changeStatus('ON_DUTY');
+        });
+
+        document.getElementById('off-duty-btn').addEventListener('click', () => {
+            // If currently in personal movement mode, exiting it means ELD resumes normal tracking.
+            if (isGeolocationPaused) {
+                isGeolocationPaused = false;
+                showToast(LANGUAGES[currentLanguage].eld_resumed_notification, 'info');
+            }
+            changeStatus('OFF_DUTY');
+        });
+
+        document.getElementById('sleeper-berth-btn').addEventListener('click', () => {
+             // If currently in personal movement mode, exiting it means ELD resumes normal tracking.
+            if (isGeolocationPaused) {
+                isGeolocationPaused = false;
+                showToast(LANGUAGES[currentLanguage].eld_resumed_notification, 'info');
+            }
+            changeStatus('SLEEPER_BERTH');
+        });
+
+        // Listeners para los botones del modal de bienvenida
+        document.getElementById('start-new-day-btn').addEventListener('click', () => {
+            resetHoursForNewDay(false); // Not loaded from storage, explicit new day
+            hideAllModals();
+            showToast(LANGUAGES[currentLanguage].start_new_day_message, 'success');
+            // Re-fetch initial location after reset
+            getCurrentLocation();
+        });
+
+        document.getElementById('continue-current-day-btn').addEventListener('click', () => {
+            hideAllModals();
+            // If the user chooses to continue, ensure currentStatus is OFF_DUTY or SLEEPER_BERTH if 10h not met
+            const elapsedSinceLast10hrBreak = (Date.now() - last10hrOffDutyCompletion) / 1000;
+            if (elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK && currentStatus !== 'OFF_DUTY' && currentStatus !== 'SLEEPER_BERTH') {
+                 // Force to OFF_DUTY if 10h not met and not already resting
+                changeStatus('OFF_DUTY'); // This will also update the log
+                showToast(LANGUAGES[currentLanguage].violation_10hr_break_needed, 'error');
+            }
+            updateTimers(); // Refresh timers
+        });
+
+        // NEW: Listeners for Ready to Drive Modal buttons
+        document.getElementById('ready-to-drive-yes-btn').addEventListener('click', () => {
+            hideAllModals();
+            last10hrOffDutyCompletion = Date.now(); // Assume 10-hour break is now complete
+            drivingTime = 0; // Reset driving hours
+            onDutyTime = 0; // Reset on-duty hours
+            isGeolocationPaused = false; // Ensure not paused
+            changeStatus('ON_DUTY'); // Change to ON_DUTY as per requirement
+            showToast(LANGUAGES[currentLanguage].pretrip_reminder, 'info'); // Reminder for pre-trip
+        });
+
+        document.getElementById('ready-to-drive-no-btn').addEventListener('click', () => {
+            hideAllModals();
+            changeStatus('SLEEPER_BERTH'); // Change to SLEEPER_BERTH
+        });
+
+        // NEW: Listeners for Personal Movement Modal buttons
+        document.getElementById('start-work-driving-btn').addEventListener('click', () => {
+            hideAllModals();
+            isGeolocationPaused = false; // Disable personal movement pause
+            const elapsedSinceLast10hrBreak = (Date.now() - last10hrOffDutyCompletion) / 1000;
+            if (elapsedSinceLast10hrBreak < MIN_10_HOUR_BREAK) {
+                // If 10h break not met, show the Ready to Drive modal
+                showReadyToDriveModal();
+            } else {
+                changeStatus('DRIVING'); // Proceed to DRIVING
+            }
+        });
+
+        document.getElementById('personal-movement-pause-btn').addEventListener('click', () => {
+            hideAllModals();
+            isGeolocationPaused = true; // Activate personal movement pause
+            changeStatus('OFF_DUTY'); // Set status to OFF_DUTY for personal movement
+            showToast(LANGUAGES[currentLanguage].eld_paused_notification, 'warning');
+        });
+
+        // Listener para el botón de Reiniciar Ciclo de 70 Horas
+        document.getElementById('restart-70h-cycle-btn').addEventListener('click', restart70hCycle);
+
+
+        // Listener para el switch de idioma
+        document.getElementById('languageSwitch').addEventListener('change', (event) => {
+            currentLanguage = event.target.checked ? 'en' : 'es';
+            localStorage.setItem('currentLanguage', currentLanguage); // Guardar preferencia
+            updateContent(); // Actualizar todos los textos
+            saveState(); // Guardar el estado con el nuevo idioma
+        });
+
+
+        // Listeners para el botón de ver/ocultar bitácora (ahora "Ver Historial")
+        document.getElementById('view-history-btn').addEventListener('click', () => {
+            hideAllModals(); // Esconder otros modales si están abiertos
+            document.getElementById('historyModal').classList.remove('hidden');
+            // Inicializar calendario con la fecha actual o la última seleccionada
+            currentCalendarDate = selectedDate ? new Date(selectedDate) : new Date();
+            renderCalendar(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth());
+            displaySelectedDayLog(selectedDate || currentLogDate); // Mostrar log del día actual por defecto o el seleccionado
+            initMap(lastKnownLat || 25.6866, lastKnownLon || -100.3161); // Inicializar/actualizar mapa
+        });
+
+        // Listener para el botón "X" de cerrar modal (arriba a la derecha)
+        document.getElementById('close-history-modal-btn').addEventListener('click', () => {
+            document.getElementById('historyModal').classList.add('hidden');
+        });
+
+        // Listener para el botón de cerrar en la parte inferior del modal
+        document.getElementById('close-history-modal-btn-bottom').addEventListener('click', () => {
+            document.getElementById('historyModal').classList.add('hidden');
+        });
+
+
+        // Listeners para la navegación del calendario
+        document.getElementById('prev-month-btn').addEventListener('click', () => {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+            renderCalendar(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth());
+        });
+
+        document.getElementById('next-month-btn').addEventListener('click', () => {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+            renderCalendar(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth());
+        });
+
+        // Guardar el estado antes de que el usuario cierre o recargue la página
+        window.addEventListener('beforeunload', saveState);
+
+        // Simple manual clear storage for development (uncomment to clear on refresh)
+        // localStorage.clear();
+    </script>
+</body>
+</html>

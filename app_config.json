@@ -12,8 +12,8 @@
         {
             "id": "A:zDx",
             "name": "Directo Exxpress",
-            "logo_url": "https://javistruck.github.io/rutas/dx.png",
-            "routes_url": "https://javistruck.github.io/rutas/dx.json",
+            "logo_url": "https://javistruck.github.io/rutas/clientes/dx.png",
+            "routes_url": "https://javistruck.github.io/rutas/clientes/dx.json",
             "monitoreo": {
                 "atencion_operador": "+528121717204",
                 "coordinador": "+528121717204"
@@ -24,4 +24,5 @@
             }
         }
     ]
+
 }

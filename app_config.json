@@ -10,7 +10,7 @@
     },
     "companies": [
         {
-            "id": "A:xDx",
+            "id": "A:zDx",
             "name": "Directo Exxpress",
             "logo_url": "https://javistruck.github.io/rutas/clientes/dx.png",
             "routes_url": "https://javistruck.github.io/rutas/clientes/dx.json",
@@ -25,4 +25,5 @@
         }
     ]
 }
+
 

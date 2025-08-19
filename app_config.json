@@ -2,16 +2,18 @@
     "default_logo_url": "https://javistruck.github.io/rutas/appsendia.png",
     "default_monitoreo": {
         "atencion_operador": "+528121717201",
-        "coordinador": "+528121717202"
+        "monitoreo_1": "+528121717202",
+        "monitoreo_2": "+528121717203",
+        "coordinador": "+528121717204"
     },
     "default_whatsapp": {
-        "monitoreo_whatsapp": "+528121717203",
-        "informacion_soporte_app": "+528121717204"
+        "monitoreo_whatsapp": "+528121717205",
+        "informacion_soporte_app": "+528121717206"
     },
     "companies": [
         {
-            "id": "baby´s",
-            "name": "Directo Exxpress",
+            "id": "baby",
+            "name": "Directo",
             "logo_url": "https://javistruck.github.io/rutas/clientes/dx.png",
             "routes_url": "https://javistruck.github.io/rutas/clientes/dx.json",
             "monitoreo": {
@@ -25,5 +27,3 @@
         }
     ]
 }
-
-

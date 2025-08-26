@@ -15,7 +15,7 @@
             "id": "A:zDx",
             "name": "Directo Express",
             "logo_url": "https://javistruck.github.io/rutas/clientes/dx.png",
-            "routes_url": "https://javistruck.github.io/rutas/clientes/dx.json"
+            "routes_url": "https://javistruck.github.io/rutas/clientes/dx.json",
             "monitoreo": {
                 "atencion_operador": "+528112371397",
                 "monitoreo_1": "+528112371397",
